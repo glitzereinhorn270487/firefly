@@ -35,3 +35,7 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Log exports and test data
+logs/
+exports/
