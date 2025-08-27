@@ -15,6 +15,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
  * - MAX_GETTX_PER_SEC (default 5)
  * - CONFIRMATIONS (optional)
  */
+
 const RPC_WSS = process.env.RPC_WSS!;
 const WEBHOOK_URL = process.env.WEBHOOK_URL!;
 const WEBHOOK_AUTH = process.env.WEBHOOK_AUTH ? `Bearer ${process.env.WEBHOOK_AUTH}` : undefined;
