@@ -9,10 +9,12 @@
     "build:listener": "tsc -p tsconfig.node.json",
     "start:listener": "node dist/listener.js",
     "start:webhook": "node dist/webhook_handler.js",
+    "start:webhook-with-metrics": "node dist/webhook_with_metrics.js",
     "start:metrics": "node dist/metrics/health.js",
     "export:logs": "./scripts/export_logs.sh",
     "dev:listener": "ts-node -P tsconfig.node.json src/listener.ts",
     "dev:webhook": "ts-node -P tsconfig.node.json src/webhook_handler.ts",
+    "dev:webhook-with-metrics": "ts-node -P tsconfig.node.json src/webhook_with_metrics.ts",
     "dev:metrics": "ts-node -P tsconfig.node.json src/metrics/health.ts"
   },
   "dependencies": {
