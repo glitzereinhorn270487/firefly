@@ -1,29 +1,57 @@
 import fetch from 'node-fetch';
 import { Connection, PublicKey } from '@solana/web3.js';
+import { handleWebhookWithSampling, defaultWebhookForward, WebhookPayload } from './listener/handler';
+import { getLogger } from './logging/logger';
+import { getConfig } from './config';
+
+const logger = getLogger();
+const config = getConfig();
 
 /**
- * Minimal Listener (Node.js)
+ * Enhanced Listener with Deterministic Sampling
  * - subscribes to Raydium v4 and SPL Token program logs via QuickNode WSS
- * - light regex checks
- * - rate-limited getParsedTransaction calls
- * - forwards compact webhook payloads to your WEBHOOK_URL
+ * - applies deterministic sampling to events
+ * - structured JSON logging with runId tracking
+ * - forwards sampled-in events to webhook pipeline
  *
  * ENV:
  * - RPC_WSS (wss endpoint)
  * - WEBHOOK_URL
  * - WEBHOOK_AUTH (optional Bearer token for outgoing)
  * - MAX_GETTX_PER_SEC (default 5)
- * - CONFIRMATIONS (optional)
+ * - SAMPLE_RATE (default 0.05)
+ * - SAMPLE_BY (poolAddress or txHash)
+ * - RAYDIUM_FACTORY_ADDRESSES (optional filter)
+ * - LOG_LEVEL (debug, info, warn, error)
  */
-const RPC_WSS = process.env.RPC_WSS!;
-const WEBHOOK_URL = process.env.WEBHOOK_URL!;
-const WEBHOOK_AUTH = process.env.WEBHOOK_AUTH ? `Bearer ${process.env.WEBHOOK_AUTH}` : undefined;
-const MAX_GETTX_PER_SEC = Number(process.env.MAX_GETTX_PER_SEC || 5);
+const RPC_WSS = config.RPC_WSS || process.env.RPC_WSS!;
+const WEBHOOK_URL = config.WEBHOOK_URL || process.env.WEBHOOK_URL!;
+const WEBHOOK_AUTH = config.WEBHOOK_AUTH || (process.env.WEBHOOK_AUTH ? `Bearer ${process.env.WEBHOOK_AUTH}` : undefined);
+const MAX_GETTX_PER_SEC = config.MAX_GETTX_PER_SEC;
 
 if (!RPC_WSS || !WEBHOOK_URL) {
-  console.error('RPC_WSS and WEBHOOK_URL env vars are required');
+  logger.error('Missing required environment variables', {
+    event: 'startup.error',
+    module: 'listener',
+    metadata: {
+      rpcWssSet: !!RPC_WSS,
+      webhookUrlSet: !!WEBHOOK_URL
+    }
+  });
   process.exit(1);
 }
+
+logger.info('Listener starting with configuration', {
+  event: 'startup.config',
+  module: 'listener',
+  metadata: {
+    sampleRate: config.SAMPLE_RATE,
+    sampleBy: config.SAMPLE_BY,
+    paperTrading: config.PAPER_TRADING,
+    logLevel: config.LOG_LEVEL,
+    factoryAddressCount: config.RAYDIUM_FACTORY_ADDRESSES.length
+  }
+});
 
 const conn = new Connection(RPC_WSS, 'confirmed');
 const RAYDIUM_V4 = new PublicKey('675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8');
@@ -62,7 +90,7 @@ function logsMatch(logs: string[], patterns: RegExp[]) {
   return patterns.some((r) => r.test(joined));
 }
 
-function buildWebhookPayload(eventType: string, signature: string, slot: number, logs: string[], accountKeys: string[], parsedTx: any | null) {
+function buildWebhookPayload(eventType: string, signature: string, slot: number, logs: string[], accountKeys: string[], parsedTx: any | null): WebhookPayload {
   return {
     eventType,
     signature,
@@ -85,45 +113,39 @@ async function fetchAndParseTx(signature: string) {
   return tx;
 }
 
-async function forwardWebhook(payload: any) {
-  const body = JSON.stringify(payload);
-  try {
-    const res = await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(WEBHOOK_AUTH ? { Authorization: WEBHOOK_AUTH } : {}),
-      },
-      body,
-    });
-    if (!res.ok) {
-      console.warn('Webhook forward failed', res.status, await res.text());
-    }
-  } catch (err) {
-    console.error('Webhook forward error', err);
-  }
+// Enhanced webhook processing with sampling
+async function processWebhookWithSampling(payload: WebhookPayload) {
+  return await handleWebhookWithSampling(payload, defaultWebhookForward);
 }
 
 conn.onLogs(RAYDIUM_V4, async (logInfo) => {
   try {
     const { logs, signature } = logInfo;
     const slot = (logInfo as any).slot || 0; // slot might not be available in all versions
+    
     if (logsMatch(logs, [/Instruction:\s*Initialize2/i])) {
       const parsedTx = await fetchAndParseTx(signature);
       const keys = parsedTx?.transaction?.message?.accountKeys?.map((k:any)=>k.pubkey?.toString?.() || k.toString?.()) || [];
       const payload = buildWebhookPayload('raydium_pool_initialize', signature, slot, logs, keys, parsedTx);
-      await forwardWebhook(payload);
+      await processWebhookWithSampling(payload);
       return;
     }
+    
     if (logsMatch(logs, [/Instruction:\s*(Burn|BurnChecked)/i])) {
       const parsedTx = await fetchAndParseTx(signature);
       const keys = parsedTx?.transaction?.message?.accountKeys?.map((k:any)=>k.pubkey?.toString?.() || k.toString?.()) || [];
       const payload = buildWebhookPayload('raydium_liquidity_burn_candidate', signature, slot, logs, keys, parsedTx);
-      await forwardWebhook(payload);
+      await processWebhookWithSampling(payload);
       return;
     }
   } catch (err) {
-    console.error('Raydium handler error', err);
+    logger.error('Raydium handler error', {
+      event: 'raydium.error',
+      module: 'listener',
+      metadata: {
+        error: err instanceof Error ? err.message : 'Unknown error'
+      }
+    });
   }
 });
 
@@ -131,16 +153,32 @@ conn.onLogs(TOKEN_PROGRAM, async (logInfo) => {
   try {
     const { logs, signature } = logInfo;
     const slot = (logInfo as any).slot || 0; // slot might not be available in all versions
+    
     if (logsMatch(logs, [/Instruction:\s*SetAuthority/i, /New Authority:\s*(none|null|<none>|0x0)/i])) {
       const parsedTx = await fetchAndParseTx(signature);
       const keys = parsedTx?.transaction?.message?.accountKeys?.map((k:any)=>k.pubkey?.toString?.() || k.toString?.()) || [];
       const payload = buildWebhookPayload('token_setauthority_revoked', signature, slot, logs, keys, parsedTx);
-      await forwardWebhook(payload);
+      await processWebhookWithSampling(payload);
       return;
     }
   } catch (err) {
-    console.error('Token handler error', err);
+    logger.error('Token handler error', {
+      event: 'token.error', 
+      module: 'listener',
+      metadata: {
+        error: err instanceof Error ? err.message : 'Unknown error'
+      }
+    });
   }
 });
 
-console.log('Listener started. Subscribed to Raydium v4 and SPL Token program logs.');
+logger.info('Listener started successfully', {
+  event: 'startup.complete',
+  module: 'listener',
+  metadata: {
+    raydiumV4: RAYDIUM_V4.toString(),
+    tokenProgram: TOKEN_PROGRAM.toString(),
+    rpcEndpoint: RPC_WSS,
+    webhookUrl: WEBHOOK_URL
+  }
+});

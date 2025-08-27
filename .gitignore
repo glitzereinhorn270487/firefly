@@ -8,6 +8,13 @@ yarn-error.log*
 dist/
 *.tsbuildinfo
 
+# Test coverage
+coverage/
+
+# Test files
+test-integration.*
+test-*.js
+
 # Environment variables
 .env
 .env.local
