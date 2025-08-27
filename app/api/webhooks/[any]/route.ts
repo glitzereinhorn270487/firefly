@@ -1,5 +1,6 @@
 // T0_STREAMS_CATCHALL_V8.ts
 import { NextResponse } from 'next/server';
+import { readLimitedText, PayloadTooLarge } from '@/lib/webhook/readLimited';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +10,9 @@ type Ctx = { params?: { any?: string[] } };
 const norm = (s: any) => String(s ?? '');
 const stripQuotes = (s: string) => s.replace(/^['"]|['"]$/g, '');
 const stripCtl = (s: string) =>
-  s.replace(/[\u0000-\u001F\u007F]/g, '').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
+  s.replace(/[
+\u0000-\u001F\u007F]/g, '').replace(/[
+\u200B-\u200D\u2060\uFEFF]/g, '');
 const hardClean = (s: any) => stripCtl(stripQuotes(norm(s).trim()));
 const mask = (s: any) => {
   const v = hardClean(s);
@@ -26,7 +29,7 @@ const eq = (a: string, b: string) => a === b;
 
 function allowUnsigned() {
   const v = hardClean(process.env.QN_ALLOW_UNSIGNED);
-  return v === '1' || v.toLowerCase() === 'true';
+  return v === '1' || (typeof v === 'string' && v.toLowerCase() === 'true');
 }
 
 function expectedFor(endpoint: string) {
@@ -161,11 +164,28 @@ export async function POST(req: Request, ctx: Ctx) {
 
   const check = tokenOkAndWhy(req, endpoint);
 
-  // Engine optional antickern (unabhängig vom Token – nur wenn ok)
+  // roher Body mit Limit lesen (-> verhindert OOM / zu große Payloads)
   let raw = '';
-  try { raw = await req.text(); } catch {}
+  try {
+    raw = await readLimitedText(req, 1_000_000); // 1 MB Limit - anpassen falls nötig
+  } catch (err) {
+    if (err instanceof PayloadTooLarge) {
+      return new NextResponse(JSON.stringify({ ok:false, reason:'PAYLOAD_TOO_LARGE' }), {
+        status: 413,
+        headers: { 'content-type': 'application/json' }
+      });
+    }
+    // falls anderes Problem beim Lesen, logge und setze raw leer
+    console.warn('[streams] error reading body', err);
+    raw = '';
+  }
+
   let payload: any = {};
-  try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+  try { payload = raw ? JSON.parse(raw) : {}; } catch (e) {
+    // falls kein JSON: preserve as raw
+    payload = { raw };
+  }
+
   if (check.ok) {
     try {
       const mod: any = await import('@/lib/paper/engine');
@@ -183,7 +203,10 @@ export async function POST(req: Request, ctx: Ctx) {
           txSells1m: Number(payload?.sells1m || 0) || 0,
         });
       }
-    } catch {}
+    } catch (err) {
+      // Fehler in Engine sollten geloggt werden, damit CI/Prod nicht silent failt
+      console.error('[streams] engine error', err);
+    }
     return NextResponse.json({ ok:true, endpoint });
   }
 
