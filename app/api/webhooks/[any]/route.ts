@@ -10,9 +10,7 @@ type Ctx = { params?: { any?: string[] } };
 const norm = (s: any) => String(s ?? '');
 const stripQuotes = (s: string) => s.replace(/^['"]|['"]$/g, '');
 const stripCtl = (s: string) =>
-  s.replace(/[
-\u0000-\u001F\u007F]/g, '').replace(/[
-\u200B-\u200D\u2060\uFEFF]/g, '');
+  s.replace(/[\u0000-\u001F\u007F]/g, '').replace(/[\u200B-\u200D\u2060\uFEFF]/g, '');
 const hardClean = (s: any) => stripCtl(stripQuotes(norm(s).trim()));
 const mask = (s: any) => {
   const v = hardClean(s);

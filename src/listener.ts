@@ -106,7 +106,8 @@ async function forwardWebhook(payload: any) {
 
 conn.onLogs(RAYDIUM_V4, async (logInfo) => {
   try {
-    const { logs, signature, slot } = logInfo;
+    const { logs, signature } = logInfo;
+    const slot = (logInfo as any).slot || 0; // slot might not be available in all versions
     if (logsMatch(logs, [/Instruction:\s*Initialize2/i])) {
       const parsedTx = await fetchAndParseTx(signature);
       const keys = parsedTx?.transaction?.message?.accountKeys?.map((k:any)=>k.pubkey?.toString?.() || k.toString?.()) || [];
@@ -128,7 +129,8 @@ conn.onLogs(RAYDIUM_V4, async (logInfo) => {
 
 conn.onLogs(TOKEN_PROGRAM, async (logInfo) => {
   try {
-    const { logs, signature, slot } = logInfo;
+    const { logs, signature } = logInfo;
+    const slot = (logInfo as any).slot || 0; // slot might not be available in all versions
     if (logsMatch(logs, [/Instruction:\s*SetAuthority/i, /New Authority:\s*(none|null|<none>|0x0)/i])) {
       const parsedTx = await fetchAndParseTx(signature);
       const keys = parsedTx?.transaction?.message?.accountKeys?.map((k:any)=>k.pubkey?.toString?.() || k.toString?.()) || [];
