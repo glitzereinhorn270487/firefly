@@ -4,11 +4,12 @@
   "description": "Listener and webhook receiver for Raydium events",
   "main": "dist/listener.js",
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:listener",
+    "build:listener": "tsc -p tsconfig.node.json",
     "start:listener": "node dist/listener.js",
     "start:webhook": "node dist/webhook_handler.js",
-    "dev:listener": "ts-node src/listener.ts",
-    "dev:webhook": "ts-node src/webhook_handler.ts"
+    "dev:listener": "ts-node -P tsconfig.node.json src/listener.ts",
+    "dev:webhook": "ts-node -P tsconfig.node.json src/webhook_handler.ts"
   },
   "dependencies": {
     "@solana/web3.js": "^1.84.0",
@@ -17,7 +18,10 @@
     "node-fetch": "^2.6.7"
   },
   "devDependencies": {
+    "typescript": "^5.4.2",
     "ts-node": "^10.9.1",
-    "typescript": "^5.4.2"
+    "@types/node": "^20.0.0",
+    "@types/express": "^4.17.0",
+    "@types/node-fetch": "^2.6.0"
   }
 }
