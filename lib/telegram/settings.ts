@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '@/lib/store/volatile';
+import { kvGet, kvSet } from '@/lib/store/redisStore';
 
 export type TgSettings = {
   global: boolean;

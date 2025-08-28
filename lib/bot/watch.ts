@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '../store/volatile';
+import { kvGet, kvSet } from '../store/redisStore';
 import { getPolicy } from './policy';
 
 type MintState = {

@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '../store/volatile';
+import { kvGet, kvSet } from '../store/redisStore';
 
 const KEY = 'idem:events'; // { [id]: ts }
 const TTL_MS = 60 * 60 * 1000;

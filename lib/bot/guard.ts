@@ -1,4 +1,4 @@
-import { kvGet } from '@/lib/store/volatile';
+import { kvGet } from '@/lib/store/redisStore';
 
 type BotStatus = { status: 'OFF'|'PAPER'|'LIVE'; level: 'low'|'mid'|'high' };
 const KEY = 'bot:status';

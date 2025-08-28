@@ -1,4 +1,4 @@
-import * as Vol from '@/lib/store/volatile';
+import * as Vol from '@/lib/store/redisStore';
 import type { Position as StorePosition } from '@/lib/store/positions';
 
 type Tick = {

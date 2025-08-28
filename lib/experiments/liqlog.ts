@@ -4,7 +4,7 @@ let mem: any[] = (globalThis as any).__liqlog || [];
 
 async function loadKV() {
   try {
-    const mod = await import('@/lib/store/volatile');
+    const mod = await import('@/lib/store/redisStore');
     return mod;
   } catch {
     return {};

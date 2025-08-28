@@ -8,6 +8,8 @@ export interface Config {
   WEBHOOK_URL?: string;
   WEBHOOK_AUTH?: string;
   MAX_GETTX_PER_SEC: number;
+  UPSTASH_REDIS_REST_URL?: string;
+  UPSTASH_REDIS_REST_TOKEN?: string;
 }
 
 /**
@@ -64,7 +66,9 @@ export function loadConfig(): Config {
     RPC_WSS: process.env.RPC_WSS,
     WEBHOOK_URL: process.env.WEBHOOK_URL,
     WEBHOOK_AUTH: process.env.WEBHOOK_AUTH,
-    MAX_GETTX_PER_SEC: maxGetTxPerSec
+    MAX_GETTX_PER_SEC: maxGetTxPerSec,
+    UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+    UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN
   };
 }
 

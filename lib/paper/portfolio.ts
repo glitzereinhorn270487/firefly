@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '../store/volatile';
+import { kvGet, kvSet } from '../store/redisStore';
 import { Position, getOpenPositions, getClosedPositions, setOpenPositions, setClosedPositions } from '../store/positions';
 
 const KEY_CASH = 'portfolio:cash';

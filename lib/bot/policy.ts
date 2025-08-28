@@ -1,4 +1,4 @@
-import { kvGet, kvSet } from '../store/volatile';
+import { kvGet, kvSet } from '../store/redisStore';
 
 export type Policy = {
   // Entry-Confirmation („One-more-buyer“)
