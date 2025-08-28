@@ -42,7 +42,7 @@ app.post('/webhook', authMiddleware, async (req, res) => {
       // add simulation logic / compute hypothetical fills here
     } else {
       // Live: enqueue execution job (not implemented here)
-      console.log(`[LIVE] ${eventType} - queued for execution`, signature);
+      console.log('[LIVE] %s - queued for execution', eventType, signature);
       // TODO: verify txSummary, double-check burned mint == known LP mint, then create & sign tx
     }
     return res.status(200).json({ ok: true });
