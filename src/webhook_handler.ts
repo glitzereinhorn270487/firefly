@@ -38,7 +38,7 @@ app.post('/webhook', authMiddleware, async (req, res) => {
   try {
     if (MODE === 'paper') {
       // Simulate: log but don't broadcast txs
-      console.log(`[PAPER] ${eventType} - ${signature} slot:${slot}`, txSummary ? { fee: txSummary.fee } : null);
+      console.log('[PAPER] %s - %s slot:%s', eventType, signature, slot, txSummary ? { fee: txSummary.fee } : null);
       // add simulation logic / compute hypothetical fills here
     } else {
       // Live: enqueue execution job (not implemented here)
