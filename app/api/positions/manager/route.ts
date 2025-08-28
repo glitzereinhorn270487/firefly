@@ -12,11 +12,12 @@ export async function GET() {
   for (const p of getOpenPositions()) {
     // Beispiel-Regeln V1: „Positionsmanager darf immer auslaufen“
     // 1) Fallback: zu alt -> zu
-    if (now - p.openedAt > MAX_AGE_MS) toClose.push(p.id);
-    // 2) Optional: Stop-Loss per Meta (z.B. -30%)
-    if (typeof p.meta?.hardSL === 'number' && typeof p.entryPriceUsd === 'number' && typeof p.currentPriceUsd === 'number') {
-      const drawdown = (p.currentPriceUsd - p.entryPriceUsd) / p.entryPriceUsd;
-      if (drawdown <= p.meta.hardSL) toClose.push(p.id);
+    if (p.openedAt && now - p.openedAt > MAX_AGE_MS) toClose.push(p.id);
+    // 2) Optional: Stop-Loss based on price difference (z.B. -30%)
+    if (typeof p.entryPrice === 'number' && typeof p.lastPrice === 'number') {
+      const drawdown = (p.lastPrice - p.entryPrice) / p.entryPrice;
+      // Example: close if drawdown is worse than -30%
+      if (drawdown <= -0.30) toClose.push(p.id);
     }
   }
 
