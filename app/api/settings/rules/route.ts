@@ -1,6 +1,6 @@
 // app/api/settings/rules/route.ts
 import { NextResponse } from 'next/server';
-import * as Vol from '@/lib/store/volatile';
+import * as Vol from '@/lib/store/redisStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

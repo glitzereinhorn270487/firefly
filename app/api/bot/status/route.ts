@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import * as KV from '@/lib/store/volatile';
+import * as KV from '@/lib/store/redisStore';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

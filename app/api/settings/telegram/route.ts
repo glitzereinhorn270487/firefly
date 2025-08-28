@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { kvGet, kvSet } from '@/lib/store/volatile';
+import { kvGet, kvSet } from '@/lib/store/redisStore';
 
 const KEY = 'settings:telegram';
 export const runtime = 'nodejs';
