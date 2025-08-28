@@ -7,6 +7,10 @@ yarn-error.log*
 # Build output
 dist/
 *.tsbuildinfo
+lib/**/*.js
+lib/**/*.d.ts
+lib/**/*.js.map
+lib/**/*.d.ts.map
 
 # Test coverage
 coverage/
