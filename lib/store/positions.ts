@@ -1,32 +1,29 @@
 // lib/store/positions.ts
 
-export type Chain = 'SOL';
-export type Category = 'Raydium' | 'PumpFun' | 'Test';
-export type Status = 'open' | 'closed';
-
 export type Position = {
   id: string;
-  chain: Chain;
-  name: string;
-  category: Category;
-  marketcap?: number;
+  chain?: string;
+  name?: string;
+  category?: string;
+  narrative?: string | null;
+  mcap?: number;
   volume?: number;
-  investmentUsd: number;
-  entryPriceUsd?: number;
-  currentPriceUsd?: number;
-  pnlUsd?: number;
-  tax?: number;
-  openedAt: number;
-  closedAt?: number;
-  status: Status;
-  reason?: string;
-  meta?: Record<string, any>;
-  // optional fürs UI / Dashboard: keine Crashes, wenn leer
+  investment?: number;
+  pnlUSD?: number;
+  taxUSD?: number;
   holders?: number;
-  txCount?: { buy: number; sell: number };
-  scores?: { scorex: number; risk: number; fomo: number; pumpDumpProb: number };
-  links?: { telegram?: string; dexscreener?: string };
-  mint?: string; // für Preisabfrage (DexScreener)
+  txCount?: { buy?: number; sell?: number };
+  scores?: any;
+  links?: any;
+  entryPrice?: number;
+  lastPrice?: number;
+  qty?: number;
+  openedAt?: number;
+  closedAt?: number | undefined;
+  status?: 'open' | 'closed';
+  reason?: string;
+  tags?: string[];
+  mint?: string;
 };
 
 const openMap = new Map<string, Position>();
@@ -36,7 +33,7 @@ const closedMap = new Map<string, Position>();
 
 export function openPosition(p: Position): Position {
   // sicherstellen, dass Status korrekt ist
-  const pos: Position = { ...p, status: 'open', closedAt: undefined, reason: p.reason };
+  const pos: Position = { ...p, status: 'open', closedAt: undefined };
   openMap.set(pos.id, pos);
   // falls es unter "closed" existierte, entfernen
   closedMap.delete(pos.id);
@@ -126,6 +123,6 @@ export function getClosedPositions(): Position[] {
 }
 
 export function listPositions(): Position[] {
-  return [...openMap.values(), ...closedMap.values()].sort((a, b) => b.openedAt - a.openedAt);
+  return [...openMap.values(), ...closedMap.values()].sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0));
 }
 

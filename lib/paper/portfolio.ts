@@ -40,12 +40,12 @@ export async function openPosition(symbol: string, price: number, usd: number): 
     txCount: { buy: 1, sell: 0 },
     scores: { scorex: 0, risk: 0, fomo: 0, pumpDumpProb: 0 },
     links: {},
-    // Paper-Extras:
     entryPrice: price,
     lastPrice: price,
     qty,
     openedAt: Date.now(),
-  } as any;
+    status: 'open',
+  };
   open.unshift(p);
   await setOpenPositions(open);
   return p;
@@ -55,10 +55,13 @@ export async function markToMarket(id: string, newPrice: number): Promise<void> 
   const open = await getOpenPositions();
   const idx = open.findIndex(x => x.id === id);
   if (idx === -1) return;
-  const p: any = open[idx];
-  p.lastPrice = newPrice;
-  p.pnlUSD = (newPrice - p.entryPrice) * p.qty;
-  open[idx] = p;
+  const p = open[idx];
+  const updatedP: Position = {
+    ...p,
+    lastPrice: newPrice,
+    pnlUSD: p.entryPrice ? (newPrice - p.entryPrice) * (p.qty || 0) : undefined,
+  };
+  open[idx] = updatedP;
   await setOpenPositions(open);
 }
 
@@ -66,11 +69,20 @@ export async function closePositionByPrice(id: string, price: number): Promise<b
   const open = await getOpenPositions();
   const idx = open.findIndex(x => x.id === id);
   if (idx === -1) return false;
-  const p: any = open[idx];
-  const realized = (price - p.entryPrice) * p.qty;
-  await credit(p.investment + realized);
+  const p = open[idx];
+  const realized = p.entryPrice && p.qty ? (price - p.entryPrice) * p.qty : 0;
+  await credit((p.investment || 0) + realized);
   const closed = await getClosedPositions();
-  const moved: any = { ...p, closedAt: Date.now(), realizedUSD: realized, lastPrice: price, txCount: { ...(p.txCount||{}), sell: (p.txCount?.sell||0)+1 } };
+  const moved: Position = { 
+    ...p, 
+    closedAt: Date.now(), 
+    lastPrice: price, 
+    status: 'closed',
+    txCount: { 
+      buy: p.txCount?.buy || 0, 
+      sell: (p.txCount?.sell || 0) + 1 
+    } 
+  };
   open.splice(idx,1);
   closed.unshift(moved);
   await setOpenPositions(open);

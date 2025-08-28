@@ -11,11 +11,11 @@ import { fetchDexPriceUsdByMint } from '@/lib/prices/dexscreener';
 export const runtime = 'nodejs';
 
 function computePnlUsd(p: Position, price: number): number | undefined {
-  const entry = p.entryPriceUsd ?? price;
-  if (!entry || !p.investmentUsd) return undefined;
-  const qty = p.meta?.qty && Number.isFinite(p.meta.qty)
-    ? Number(p.meta.qty)
-    : p.investmentUsd / entry;
+  const entry = p.entryPrice ?? price;
+  if (!entry || !p.investment) return undefined;
+  const qty = p.qty && Number.isFinite(p.qty)
+    ? Number(p.qty)
+    : p.investment / entry;
   if (!qty) return undefined;
   const pnl = (price - entry) * qty;
   return Math.round(pnl * 100) / 100;
@@ -33,9 +33,9 @@ export async function GET() {
       if (!price) return;
       const pnlUsd = computePnlUsd(p, price);
       const patch: Partial<Position> = {
-        currentPriceUsd: price,
-        entryPriceUsd: p.entryPriceUsd ?? price,
-        pnlUsd,
+        lastPrice: price,
+        entryPrice: p.entryPrice ?? price,
+        pnlUSD: pnlUsd,
       };
       updatePosition(p.id, patch);
     })
