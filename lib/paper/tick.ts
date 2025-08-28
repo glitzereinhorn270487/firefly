@@ -129,5 +129,52 @@ export async function onTick(signal: any) {
 
   const store = await getStore();
   const opened = await store.openPosition?.(pos);
+
+  // Attempt to trigger a simulated trade via the project's PaperTrader (if available)
+  try {
+    const path = require('path');
+    function tryRequire(modulePath: string) {
+      try {
+        return require(modulePath);
+      } catch (err: any) {
+        if (err && err.code === 'MODULE_NOT_FOUND') return null;
+        throw err;
+      }
+    }
+
+    const traderModule =
+      tryRequire(path.join(__dirname, '..', '..', 'src', 'trading', 'paperTrader')) ||
+      tryRequire(path.join(process.cwd(), 'src', 'trading', 'paperTrader')) ||
+      tryRequire('@/trading/paperTrader');
+
+    if (traderModule) {
+      const TraderCtor = traderModule?.default || traderModule?.PaperTrader || traderModule;
+      if (typeof TraderCtor === 'function') {
+        const trader = new TraderCtor();
+        if (typeof trader.placeOrder === 'function') {
+          const order = {
+            side: 'buy',
+            symbol: pos.name,
+            price: Number(signal?.priceUsd || signal?.price || pos.entryPrice || 1.0),
+            amount: invest,
+            slippage: 0.5,
+          };
+          try {
+            const result = await trader.placeOrder(order as any);
+            // persist order id / result into the opened position (best effort)
+            if (result && result.orderId) {
+              await store.updatePosition?.(pos.id, { meta: { ...(pos.meta || {}), orderId: result.orderId }, trade: result });
+            }
+            console.log('PaperTrader simulated order result:', result);
+          } catch (err) {
+            console.error('PaperTrader.placeOrder failed:', err);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to run PaperTrader integration:', err);
+  }
+
   return { ok: true, opened: opened || pos };
 }
