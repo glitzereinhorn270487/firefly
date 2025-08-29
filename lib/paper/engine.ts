@@ -160,7 +160,7 @@ export async function processAcceptedEvent(event: {
     // Additional processing could be added here for accepted events
     // such as queuing for further analysis, updating metrics, etc.
     
-    return { ok: true, processed: true, ...result };
+    return { processed: true, ...result };
   } catch (error) {
     return { 
       ok: false, 

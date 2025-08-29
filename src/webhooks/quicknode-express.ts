@@ -1,5 +1,6 @@
-// app/api/webhooks/quicknode/route.ts
-import { NextResponse } from 'next/server';
+// src/webhooks/quicknode-express.ts
+// Express-based alternative to the Next.js API route for production deployment
+import express from 'express';
 import { Connection } from '@solana/web3.js';
 import { 
   parseEnvList, 
@@ -9,10 +10,9 @@ import {
   markAsSeen,
   probePoolLiquidityUsd,
   extractPoolAddress 
-} from '@/lib/webhooks/quicknode-utils';
+} from './quicknode-utils';
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+const router = express.Router();
 
 // Environment configuration
 const RAYDIUM_PROGRAM_IDS = parseEnvList(process.env.RAYDIUM_PROGRAM_IDS);
@@ -35,31 +35,26 @@ try {
   // Connection optional for webhook processing
 }
 
-function getQueryToken(req: Request): string {
-  try { return new URL(req.url).searchParams.get('token') || ''; }
-  catch { return ''; }
-}
-
-function getHeaderToken(req: Request): string {
-  const auth = req.headers.get('authorization') || '';
+function getHeaderToken(req: express.Request): string {
+  const auth = req.headers.authorization || '';
   const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   const candidates = [
-    getQueryToken(req),
+    req.query.token as string,
     bearer,
-    req.headers.get('x-qn-token') || '',
-    req.headers.get('x-quicknode-token') || '',
-    req.headers.get('x-security-token') || '',
-    req.headers.get('x-webhook-token') || '',
-    req.headers.get('x-verify-token') || '',
-    req.headers.get('x-token') || '',
-    req.headers.get('x-auth-token') || '',
-    req.headers.get('x-api-key') || '',
-    req.headers.get('quicknode-token') || '',
+    req.headers['x-qn-token'] as string,
+    req.headers['x-quicknode-token'] as string,
+    req.headers['x-security-token'] as string,
+    req.headers['x-webhook-token'] as string,
+    req.headers['x-verify-token'] as string,
+    req.headers['x-token'] as string,
+    req.headers['x-auth-token'] as string,
+    req.headers['x-api-key'] as string,
+    req.headers['quicknode-token'] as string,
   ].filter(Boolean);
   return candidates[0] || '';
 }
 
-function authorize(req: Request, envVarName = 'QN_WEBHOOK_TOKEN') {
+function authorize(req: express.Request, envVarName = 'QN_WEBHOOK_TOKEN') {
   const allowUnsigned = process.env.QN_ALLOW_UNSIGNED === '1';
   const want = (process.env[envVarName] as string) || '';
   const got = getHeaderToken(req);
@@ -90,7 +85,7 @@ function extractLogs(node: any): string[] {
     node?.meta?.logMessages,
     node?.transaction?.meta?.logMessages,
     node?.value?.transaction?.meta?.logMessages,
-    node?.message?.logs, // falls QuickNode so nennt
+    node?.message?.logs,
   ];
   for (const c of cands) {
     const arr = toArray<string>(c);
@@ -113,35 +108,23 @@ function extractAccountKeys(node: any): string[] {
 }
 
 function* iterTransactions(body: any) {
-  // QuickNode liefert i.d.R. { transactions: [ ... ] }
   for (const t of toArray(body?.transactions)) yield t;
-
-  // Fallbacks: manchmal steckt das Ding eine Ebene tiefer/anders
   if (body?.transaction || body?.value?.transaction) yield body;
-  if (body?.result?.transaction) yield body.result; // RPC-ähnlich
+  if (body?.result?.transaction) yield body.result;
 }
 
-/**
- * Check if transaction touches allowed program IDs
- */
 function isAllowedProgram(node: any): boolean {
   const keys = extractAccountKeys(node);
   return allowedProgramIds.some(programId => keys.includes(programId));
 }
 
-/**
- * Check if transaction touches allowed factory addresses
- */
 function isAllowedFactory(node: any): boolean {
   const keys = extractAccountKeys(node);
   return allowedFactoryAddresses.some(factory => keys.includes(factory));
 }
 
-/**
- * Check if transaction involves whitelisted tokens (if configured)
- */
 function isWhitelistedToken(node: any): boolean {
-  if (TOKEN_WHITELIST_MINTS.length === 0) return true; // No whitelist = allow all
+  if (TOKEN_WHITELIST_MINTS.length === 0) return true;
   
   const tokenMint = collectField(node, ['mint', 'tokenMint', 'baseMint', 'quoteMint']);
   if (!tokenMint) return false;
@@ -156,90 +139,96 @@ function isRaydiumInit2(node: any): boolean {
   return hasInit2 && touchesAllowedProgram;
 }
 
-async function parseBody(req: Request) {
-  const ct = (req.headers.get('content-type') || '').toLowerCase();
-  let text = '';
-  try { text = await req.text(); } catch {}
-  if (!text) return { ok: false as const, body: null, hasRaw: false, ct, text: '' };
-  try {
-    const body = JSON.parse(text);
-    return { ok: true as const, body, hasRaw: true, ct, text };
-  } catch (e) {
-    console.warn('[webhook:quicknode][bad-json]', { ct, preview: text.slice(0, 200) });
-    return { ok: false as const, body: null, hasRaw: true, ct, text };
-  }
-}
-
-/**
- * Process accepted event in background (non-blocking)
- */
 async function processEventAsync(event: any): Promise<void> {
   try {
-    // Dynamic import to avoid circular dependencies and improve cold start performance
-    console.info('[webhook:quicknode][accepted-event]', {
+    // Simple async processing - in production this would connect to paper trading engine
+    // For now, just log the accepted event
+    console.info('[webhook:quicknode-express][accepted-event]', {
       poolAddress: event.poolAddress,
       signature: event.signature || 'unknown',
       liquidityUsd: event.liquidityUsd,
       processedAt: event.processedAt
     });
     
-    // In production with proper Next.js setup, this would import the paper engine:
-    // const { processAcceptedEvent } = await import('@/lib/paper/engine');
+    // Future: integrate with paper trading engine here
+    // const { processAcceptedEvent } = await import('../../lib/paper/engine');
     // await processAcceptedEvent({ ... });
     
   } catch (error) {
-    console.error('[webhook:quicknode][process-error]', { 
+    console.error('[webhook:quicknode-express][process-error]', { 
       error: error instanceof Error ? error.message : String(error) 
     });
   }
 }
 
-export async function POST(req: Request) {
-  const t0 = Date.now();
-  const url = req.url;
+// GET endpoint for health check
+router.get('/quicknode', (req, res) => {
+  const config = {
+    programIds: allowedProgramIds.length,
+    factoryAddresses: allowedFactoryAddresses.length,
+    tokenWhitelist: TOKEN_WHITELIST_MINTS.length,
+    hmacEnabled: !!QUICKNODE_WEBHOOK_SECRET,
+    redisEnabled: !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
+    onChainProbeEnabled: !!solanaConnection
+  };
   
-  console.info('[webhook:quicknode][hit]', {
+  res.json({ 
+    ok: true, 
+    info: 'QuickNode webhook (Express) is up',
+    config
+  });
+});
+
+// POST endpoint for webhook processing
+router.post('/quicknode', express.raw({ type: 'application/json' }), async (req, res) => {
+  const t0 = Date.now();
+  
+  console.info('[webhook:quicknode-express][hit]', {
     method: req.method,
-    url,
+    url: req.url,
     tokenLen: getHeaderToken(req).length,
-    ct: req.headers.get('content-type'),
-    clen: req.headers.get('content-length'),
-    ua: req.headers.get('user-agent')
+    ct: req.headers['content-type'],
+    clen: req.headers['content-length'],
+    ua: req.headers['user-agent']
   });
 
-  // Parse request body first for signature verification
-  const parsed = await parseBody(req);
-  if (!parsed.ok || !parsed.body) {
-    console.warn('[webhook:quicknode][bad-body]', { hasRaw: parsed.hasRaw });
-    return NextResponse.json({ ok: false, error: 'bad-body' }, { status: 400 });
-  }
-
-  // HMAC signature verification if secret is configured
-  if (QUICKNODE_WEBHOOK_SECRET) {
-    const signature = req.headers.get('x-quicknode-signature') || req.headers.get('x-qn-signature') || '';
-    const nonce = req.headers.get('x-quicknode-nonce') || req.headers.get('x-qn-nonce') || '';
-    const timestamp = req.headers.get('x-quicknode-timestamp') || req.headers.get('x-qn-timestamp') || '';
+  // Parse request body
+  let parsed: any;
+  try {
+    const bodyText = req.body.toString('utf8');
+    parsed = JSON.parse(bodyText);
     
-    if (!verifyHmacSignature(parsed.text, signature, QUICKNODE_WEBHOOK_SECRET, nonce, timestamp)) {
-      console.warn('[webhook:quicknode][invalid-signature]', { 
-        hasSignature: !!signature,
-        hasNonce: !!nonce,
-        hasTimestamp: !!timestamp
-      });
-      return NextResponse.json({ ok: false, error: 'invalid-signature' }, { status: 401 });
+    // HMAC signature verification if secret is configured
+    if (QUICKNODE_WEBHOOK_SECRET) {
+      const signature = (req.headers['x-quicknode-signature'] || req.headers['x-qn-signature'] || '') as string;
+      const nonce = (req.headers['x-quicknode-nonce'] || req.headers['x-qn-nonce'] || '') as string;
+      const timestamp = (req.headers['x-quicknode-timestamp'] || req.headers['x-qn-timestamp'] || '') as string;
+      
+      if (!verifyHmacSignature(bodyText, signature, QUICKNODE_WEBHOOK_SECRET, nonce, timestamp)) {
+        console.warn('[webhook:quicknode-express][invalid-signature]', { 
+          hasSignature: !!signature,
+          hasNonce: !!nonce,
+          hasTimestamp: !!timestamp
+        });
+        return res.status(401).json({ ok: false, error: 'invalid-signature' });
+      }
     }
+  } catch (error) {
+    console.warn('[webhook:quicknode-express][bad-body]', { 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+    return res.status(400).json({ ok: false, error: 'bad-body' });
   }
 
   // Token-based authorization (legacy support)
   const auth = authorize(req, 'QN_WEBHOOK_TOKEN');
   if (!auth.ok && !QUICKNODE_WEBHOOK_SECRET) {
-    // Only require token auth if no HMAC secret is configured
-    console.warn('[webhook:quicknode][unauthorized]', { 
+    console.warn('[webhook:quicknode-express][unauthorized]', { 
       wantLen: auth.wantLen, 
       gotLen: auth.gotLen, 
       reason: auth.reason 
     });
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+    return res.status(401).json({ ok: false, error: 'unauthorized' });
   }
 
   let txs = 0;
@@ -248,13 +237,12 @@ export async function POST(req: Request) {
   let ignored = 0;
   let duplicates = 0;
   
-  for (const node of iterTransactions(parsed.body)) {
+  for (const node of iterTransactions(parsed)) {
     txs++;
     
     if (!isRaydiumInit2(node)) continue;
     matches++;
     
-    // Apply server-side whitelist filters
     if (!isAllowedFactory(node)) {
       ignored++;
       continue;
@@ -271,7 +259,6 @@ export async function POST(req: Request) {
       continue;
     }
     
-    // Deduplication check
     try {
       if (await isAlreadySeen(poolAddress)) {
         duplicates++;
@@ -279,24 +266,20 @@ export async function POST(req: Request) {
         continue;
       }
       
-      // Mark as seen before processing
       await markAsSeen(poolAddress);
     } catch (error) {
-      console.warn('[webhook:quicknode][dedup-error]', { 
+      console.warn('[webhook:quicknode-express][dedup-error]', { 
         error: error instanceof Error ? error.message : String(error),
         poolAddress 
       });
-      // Continue processing if dedup fails (fail open)
     }
     
-    // Light on-chain liquidity probe (best effort)
     let liquidityUsd: number | null = null;
     if (solanaConnection) {
       try {
         liquidityUsd = await probePoolLiquidityUsd(poolAddress, solanaConnection);
       } catch (error) {
-        // Best effort - continue if probe fails
-        console.debug('[webhook:quicknode][probe-error]', { 
+        console.debug('[webhook:quicknode-express][probe-error]', { 
           error: error instanceof Error ? error.message : String(error),
           poolAddress 
         });
@@ -305,7 +288,6 @@ export async function POST(req: Request) {
     
     accepted++;
     
-    // Process accepted event asynchronously to keep response fast
     processEventAsync({
       ...node,
       poolAddress,
@@ -316,7 +298,7 @@ export async function POST(req: Request) {
 
   const processingMs = Date.now() - t0;
   
-  console.info('[webhook:quicknode][batch]', { 
+  console.info('[webhook:quicknode-express][batch]', { 
     txs, 
     matches, 
     accepted, 
@@ -325,7 +307,7 @@ export async function POST(req: Request) {
     ms: processingMs 
   });
   
-  return NextResponse.json({ 
+  res.json({ 
     ok: true, 
     received: true, 
     txs, 
@@ -335,21 +317,6 @@ export async function POST(req: Request) {
     duplicates,
     ms: processingMs 
   });
-}
+});
 
-export async function GET() {
-  const config = {
-    programIds: allowedProgramIds.length,
-    factoryAddresses: allowedFactoryAddresses.length,
-    tokenWhitelist: TOKEN_WHITELIST_MINTS.length,
-    hmacEnabled: !!QUICKNODE_WEBHOOK_SECRET,
-    redisEnabled: !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN),
-    onChainProbeEnabled: !!solanaConnection
-  };
-  
-  return NextResponse.json({ 
-    ok: true, 
-    info: 'QuickNode webhook is up',
-    config
-  });
-}
+export default router;
