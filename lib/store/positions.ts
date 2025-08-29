@@ -1,5 +1,3 @@
-// lib/store/positions.ts
-
 export type Position = {
   id: string;
   chain?: string;
@@ -29,100 +27,135 @@ export type Position = {
 const openMap = new Map<string, Position>();
 const closedMap = new Map<string, Position>();
 
-// --- CRUD / Mutations ---
-
-export function openPosition(p: Position): Position {
-  // sicherstellen, dass Status korrekt ist
-  const pos: Position = { ...p, status: 'open', closedAt: undefined };
-  openMap.set(pos.id, pos);
-  // falls es unter "closed" existierte, entfernen
-  closedMap.delete(pos.id);
-  return pos;
+function clonePos(p: Position): Position {
+  return JSON.parse(JSON.stringify(p)) as Position;
 }
 
-export function closePosition(id: string, reason = 'closed'): Position | null {
-  const cur = openMap.get(id) ?? closedMap.get(id);
-  if (!cur) return null;
+export function openPosition(p: Position): Position {
+  if (!p || !p.id) {
+    throw new Error('Position must have an id');
+  }
 
-  const upd: Position = {
-    ...cur,
-    status: 'closed',
-    reason,
-    closedAt: Date.now(),
+  const id = p.id;
+  // Ensure status is open, but preserve existing openedAt if present
+  const pos: Position = {
+    ...p,
+    status: 'open',
+    openedAt: p.openedAt, // Keep existing value or undefined
+    closedAt: undefined,
   };
 
-  openMap.delete(id);
-  closedMap.set(id, upd);
-  return upd;
+  // If exists in closedMap, remove it
+  if (closedMap.has(id)) {
+    closedMap.delete(id);
+  }
+
+  openMap.set(id, pos);
+  return clonePos(pos);
+}
+
+export function closePosition(id: string, reason?: string): Position | null {
+  if (!id) return null;
+  const curOpen = openMap.get(id);
+  const curClosed = closedMap.get(id);
+  const now = Date.now();
+
+  if (curOpen) {
+    const upd: Position = { ...curOpen, status: 'closed', closedAt: now, reason: reason || curOpen.reason || 'closed' };
+    openMap.delete(id);
+    closedMap.set(id, upd);
+    return clonePos(upd);
+  }
+
+  if (curClosed) {
+    // already closed; update reason/closedAt defensively
+    const upd: Position = { ...curClosed, status: 'closed', closedAt: curClosed.closedAt || now, reason: reason || curClosed.reason || 'closed' };
+    closedMap.set(id, upd);
+    return clonePos(upd);
+  }
+
+  return null;
 }
 
 export function updatePosition(id: string, patch: Partial<Position>): Position | null {
-  const cur = openMap.get(id) ?? closedMap.get(id);
-  if (!cur) return null;
+  if (!id) return null;
+  const inOpen = openMap.get(id);
+  const inClosed = closedMap.get(id);
 
-  const next: Position = { ...cur, ...patch };
+  if (!inOpen && !inClosed) return null;
 
-  // in die richtige Map einsortieren
-  if (next.status === 'open') {
+  // Determine which map to update based on patch.status (if provided) or current status
+  const targetStatus = patch.status || (inOpen ? inOpen.status : inClosed?.status);
+  const now = Date.now();
+
+  let base: Position | undefined = inOpen ?? inClosed;
+  if (!base) return null;
+
+  const merged: Position = {
+    ...base,
+    ...patch,
+  } as Position;
+
+  if (targetStatus === 'open') {
+    // move to open
+    merged.status = 'open';
+    merged.openedAt = merged.openedAt || base.openedAt || now;
+    merged.closedAt = undefined;
     closedMap.delete(id);
-    openMap.set(id, next);
+    openMap.set(id, merged);
   } else {
+    // move to closed
+    merged.status = 'closed';
+    merged.closedAt = merged.closedAt || now;
     openMap.delete(id);
-    closedMap.set(id, next);
+    closedMap.set(id, merged);
   }
-  return next;
+
+  return clonePos(merged);
 }
 
-// --- Setter, die von deinem bestehenden Code erwartet werden ---
-
-/**
- * Ersetzt die *offenen* Positionen vollständig.
- * Geschlossene bleiben unverändert.
- */
 export function setOpenPositions(list: Position[]): void {
   openMap.clear();
+  if (!Array.isArray(list)) return;
   for (const p of list) {
-    // nur "open" zulassen; falls etwas anderes reinkommt, hart auf open setzen
+    if (!p || !p.id) continue;
     const pos: Position = { ...p, status: 'open', closedAt: undefined };
-    openMap.set(pos.id, pos);
-    // doppelte Sicherheit: nicht auch unter closed führen
-    closedMap.delete(pos.id);
+    openMap.set(p.id, pos);
+    // Ensure it's removed from closedMap
+    if (closedMap.has(p.id)) closedMap.delete(p.id);
   }
 }
 
-/**
- * Ersetzt die *geschlossenen* Positionen vollständig.
- * Offene bleiben unverändert.
- */
 export function setClosedPositions(list: Position[]): void {
   closedMap.clear();
+  if (!Array.isArray(list)) return;
+  const now = Date.now();
   for (const p of list) {
-    const pos: Position = {
-      ...p,
-      status: 'closed',
-      closedAt: p.closedAt ?? Date.now(),
-      reason: p.reason ?? 'closed',
-    };
-    closedMap.set(pos.id, pos);
-    openMap.delete(pos.id);
+    if (!p || !p.id) continue;
+    const pos: Position = { ...p, status: 'closed', closedAt: p.closedAt || now, reason: p.reason || 'closed' };
+    closedMap.set(p.id, pos);
+    if (openMap.has(p.id)) openMap.delete(p.id);
   }
 }
 
-// --- Getter / Queries ---
-
 export function getPosition(id: string): Position | undefined {
-  return openMap.get(id) ?? closedMap.get(id);
+  if (!id) return undefined;
+  const o = openMap.get(id);
+  if (o) return clonePos(o);
+  const c = closedMap.get(id);
+  if (c) return clonePos(c);
+  return undefined;
 }
 
 export function getOpenPositions(): Position[] {
-  return Array.from(openMap.values());
+  return Array.from(openMap.values()).map(clonePos);
 }
 
 export function getClosedPositions(): Position[] {
-  return Array.from(closedMap.values());
+  return Array.from(closedMap.values()).map(clonePos);
 }
 
 export function listPositions(): Position[] {
-  return [...openMap.values(), ...closedMap.values()].sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0));
+  return [...getOpenPositions(), ...getClosedPositions()].sort((a, b) => (b.openedAt ?? 0) - (a.openedAt ?? 0));
 }
 
