@@ -141,6 +141,35 @@ async function paperStagnationSweep(CFG: ReturnType<typeof getEffectiveConfig>) 
 // Public
 export async function onWebhook(_evt:{source?:string; path?:string; payload?:any}) { return { ok:true }; }
 
+/**
+ * Process accepted webhook event in background
+ * This function is called asynchronously by the webhook handler
+ */
+export async function processAcceptedEvent(event: {
+  source?: string;
+  path?: string;
+  payload?: any;
+  poolAddress?: string;
+  txHash?: string;
+  timestamp?: number;
+}): Promise<{ ok: boolean; processed?: boolean; error?: string }> {
+  try {
+    // Call existing onWebhook function
+    const result = await onWebhook(event);
+    
+    // Additional processing could be added here for accepted events
+    // such as queuing for further analysis, updating metrics, etc.
+    
+    return { ok: true, processed: true, ...result };
+  } catch (error) {
+    return { 
+      ok: false, 
+      processed: false, 
+      error: error instanceof Error ? error.message : String(error) 
+    };
+  }
+}
+
 export async function onTick(t: Tick) {
   const CFG = getEffectiveConfig();
 

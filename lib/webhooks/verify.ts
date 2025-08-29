@@ -3,7 +3,7 @@ import zlib from 'zlib';
 
 export type QnVerifyResult = { ok: boolean; reason?: string; payloadText?: string };
 
-function pickSecret() {
+export function pickSecret() {
   // Akzeptiere getrennte Tokens pro Stream ODER gemeinsamen Token
   return (
     process.env.QN_PUMPFUN_TOKEN ||
