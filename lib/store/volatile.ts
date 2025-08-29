@@ -1,60 +1,32 @@
-// lib/store/volatile.ts
-type JSONValue = any;
+// Simple volatile KV stub used by loadRules / portfolio during local runs and tests.
+// If UPSTASH env vars are provided, you can extend this to call the real Upstash REST API.
+type KV = {
+  kvGet?: <T = any>(key: string) => Promise<T | undefined>;
+  kvSet?: (key: string, value: any) => Promise<void>;
+  kvDel?: (key: string) => Promise<void>;
+};
 
-const mem = new Map<string, JSONValue>();
+const mem = new Map<string, any>();
 
-export function get<T = any>(key: string, def?: T): T {
-  return (mem.has(key) ? mem.get(key) : def) as T;
-}
-
-export function set<T = any>(key: string, val: T): void {
-  mem.set(key, val);
-}
-
-export function getBoolean(key: string, def = false): boolean {
-  const v = get<any>(key);
-  return typeof v === 'boolean' ? v : Boolean(def);
-}
-
-export function getNumber(key: string, def = 0): number {
-  const v = get<any>(key);
-  const n = typeof v === 'number' ? v : Number.NaN;
-  return Number.isFinite(n) ? n : def;
-}
-
-export function merge(patch: Record<string, any>, rootKey = 'rules') {
-  const cur = get<Record<string, any>>(rootKey, {});
-  const next = deepMerge(cur, patch);
-  set(rootKey, next);
-  return next;
-}
-
-function isObj(x: unknown): x is Record<string, any> {
-  return !!x && typeof x === 'object' && !Array.isArray(x);
-}
-
-// kleine, robuste Deep-Merge
-function deepMerge(a: any, b: any): any {
-  if (Array.isArray(a) && Array.isArray(b)) return b.slice();
-
-  if (isObj(a) && isObj(b)) {
-    const ao: Record<string, any> = a;
-    const bo: Record<string, any> = b;
-    const out: Record<string, any> = { ...ao };
-    for (const k of Object.keys(bo)) {
-      out[k] = deepMerge(ao[k], bo[k]);
-    }
-    return out;
+export const kvGet = async <T = any>(key: string): Promise<T | undefined> => {
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    // Optional: implement real Upstash call here if desired.
+    // For MVP keep in-memory fallback to avoid external dependency.
   }
+  return mem.has(key) ? (mem.get(key) as T) : undefined;
+};
 
-  return b;
-}
+export const kvSet = async (key: string, value: any): Promise<void> => {
+  // Keep JSON-serializable values safe
+  try {
+    mem.set(key, value);
+  } catch {
+    mem.set(key, JSON.stringify(value));
+  }
+};
 
-// Async-Aliase (Kompatibilität)
-export async function kvGet<T = any>(key: string): Promise<T | undefined> {
-  return get<T>(key);
-}
+export const kvDel = async (key: string): Promise<void> => {
+  mem.delete(key);
+};
 
-export async function kvSet<T = any>(key: string, val: T): Promise<void> {
-  set(key, val);
-}
+export default { kvGet, kvSet, kvDel } as KV;
