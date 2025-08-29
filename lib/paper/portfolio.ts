@@ -1,91 +1,79 @@
+// Minimal portfolio wrapper used by Paper trading flow.
+// - Uses the in-memory volatile kv (lib/store/volatile.ts) for cash
+// - Uses the positions store (lib/store/positions.ts) for positions
+// Keep this minimal and defensive for the MVP.
+import * as positions from '../store/positions';
 import { kvGet, kvSet } from '../store/volatile';
-import { Position, getOpenPositions, getClosedPositions, setOpenPositions, setClosedPositions } from '../store/positions';
 
-const KEY_CASH = 'portfolio:cash';
+const CASH_KEY = 'portfolio:cash';
 
 export async function getCash(): Promise<number> {
-  const c = await kvGet<number>(KEY_CASH);
-  if (typeof c === 'number') return c;
-  await kvSet(KEY_CASH, 120); // Startkapital V1.0
-  return 120;
-}
-export async function setCash(v: number) { await kvSet(KEY_CASH, v); }
-
-export async function credit(amount: number) { await setCash((await getCash()) + amount); }
-export async function debit(amount: number): Promise<boolean> {
-  const c = await getCash();
-  if (c < amount) return false;
-  await setCash(c - amount);
-  return true;
+  try {
+    const v = await kvGet<number>(CASH_KEY);
+    return typeof v === 'number' ? v : 0;
+  } catch (err) {
+    console.error('getCash failed:', err);
+    return 0;
+  }
 }
 
-// ---- Positions-Helfer für Paper-Orders ----
-export async function openPosition(symbol: string, price: number, usd: number): Promise<Position|null> {
-  const ok = await debit(usd);
-  if (!ok) return null;
-  const qty = usd / price;
-  const open = await getOpenPositions();
-  const p: Position = {
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2,7),
-    chain: 'Solana',
-    name: symbol,
-    category: 'Meme',
-    narrative: null,
-    mcap: 0,
-    volume: 0,
-    investment: usd,
-    pnlUSD: 0,
-    taxUSD: 0,
-    holders: 0,
-    txCount: { buy: 1, sell: 0 },
-    scores: { scorex: 0, risk: 0, fomo: 0, pumpDumpProb: 0 },
-    links: {},
-    entryPrice: price,
-    lastPrice: price,
-    qty,
-    openedAt: Date.now(),
+export async function setCash(amount: number): Promise<void> {
+  try {
+    await kvSet(CASH_KEY, Number(amount));
+  } catch (err) {
+    console.error('setCash failed:', err);
+  }
+}
+
+/**
+ * Open a paper position: create a Position in the positions store and deduct cash (best-effort).
+ * Returns the created Position clone from positions.openPosition.
+ */
+export async function openPaperPosition(pos: Partial<positions.Position> & { id: string; investmentUsd?: number }): Promise<positions.Position> {
+  // Defensive: ensure id exists
+  if (!pos || !pos.id) throw new Error('Position must include id');
+
+  // Best-effort: deduct cash
+  try {
+    const cash = await getCash();
+    const invest = Number(pos.investment ?? pos.investmentUsd ?? 0);
+    if (!isNaN(invest) && invest > 0) {
+      const newCash = Math.max(0, cash - invest);
+      await setCash(newCash);
+    }
+  } catch (err) {
+    console.warn('openPaperPosition: failed to update cash (continuing):', err);
+  }
+
+  // ensure minimal shape for store
+  const now = Date.now();
+  const payload: positions.Position = {
+    id: pos.id,
+    chain: pos.chain,
+    name: pos.name,
+    category: pos.category,
+    investment: pos.investment ?? pos.investmentUsd,
+    entryPrice: pos.entryPrice,
+    openedAt: pos.openedAt ?? now,
     status: 'open',
+    mint: pos.mint,
+    scores: pos.scores,
+    tags: pos.tags,
   };
-  open.unshift(p);
-  await setOpenPositions(open);
-  return p;
+
+  return positions.openPosition(payload);
 }
 
-export async function markToMarket(id: string, newPrice: number): Promise<void> {
-  const open = await getOpenPositions();
-  const idx = open.findIndex(x => x.id === id);
-  if (idx === -1) return;
-  const p = open[idx];
-  const updatedP: Position = {
-    ...p,
-    lastPrice: newPrice,
-    pnlUSD: p.entryPrice ? (newPrice - p.entryPrice) * (p.qty || 0) : undefined,
-  };
-  open[idx] = updatedP;
-  await setOpenPositions(open);
+/**
+ * Update an existing position (close, update meta, etc.)
+ */
+export async function updatePaperPosition(id: string, patch: Partial<positions.Position>): Promise<positions.Position | null> {
+  try {
+    return positions.updatePosition(id, patch);
+  } catch (err) {
+    console.error('updatePaperPosition failed:', err);
+    return null;
+  }
 }
 
-export async function closePositionByPrice(id: string, price: number): Promise<boolean> {
-  const open = await getOpenPositions();
-  const idx = open.findIndex(x => x.id === id);
-  if (idx === -1) return false;
-  const p = open[idx];
-  const realized = p.entryPrice && p.qty ? (price - p.entryPrice) * p.qty : 0;
-  await credit((p.investment || 0) + realized);
-  const closed = await getClosedPositions();
-  const moved: Position = { 
-    ...p, 
-    closedAt: Date.now(), 
-    lastPrice: price, 
-    status: 'closed',
-    txCount: { 
-      buy: p.txCount?.buy || 0, 
-      sell: (p.txCount?.sell || 0) + 1 
-    } 
-  };
-  open.splice(idx,1);
-  closed.unshift(moved);
-  await setOpenPositions(open);
-  await setClosedPositions(closed);
-  return true;
-}
+export default { getCash, setCash, openPaperPosition, updatePaperPosition };
