@@ -1,0 +1,4 @@
+bot: task 17344900412
+
+Task:
+Aufgabe (Hotfix, PR-Mode): - Finde alle Dateien im Repo, deren Name Windows-inkompatible Zeichen enthält (Regex: [<>:"\|?*]) ODER die mit "Bot" beginnen und offensichtlich aus einem Task-Text entstanden sind. - Lösche diese Datei(en). - Falls in so einer Datei sinnvoller Text steht, füge ihn kurz als Abschnitt "Firefly Bot" in die README.md ein. - Commit-Message: chore: remove Windows-incompatible filename(s) and fold content into README
