@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: 0   # origin/main verfügbar machen
 
       - name: Git-User setzen (firefly-bot)
         run: |
@@ -42,13 +42,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install "aider-chat>=0.60"
 
-      # 👇 NEU: Task-Text sicher in Datei schreiben (kein Quoting-Ärger)
-      - name: Task-Text in Datei schreiben
-        if: ${{ env.OPENAI_API_KEY != '' }}
+      # Task-Text & Metadaten in Dateien schreiben (quote-safe)
+      - name: Task-Text in Dateien schreiben
         run: |
+          # Task-Text
           cat > .firefly_task.txt << 'EOF'
           ${{ inputs.task }}
           EOF
+
+          # Sichere, kurze Titelzeile (ohne Quotes/Klammern)
+          echo "bot: task ${GITHUB_RUN_ID}" > .firefly_title.txt
+
+          # Commit-Message mit Task im Body
+          {
+            echo "bot: task ${GITHUB_RUN_ID}"
+            echo
+            echo "Task:"
+            cat .firefly_task.txt
+          } > .firefly_commit.txt
 
       - name: Code-Änderungen aus Task erzeugen (optional)
         if: ${{ env.OPENAI_API_KEY != '' }}
@@ -59,7 +70,9 @@ jobs:
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
-            git commit -m "bot: ${{ inputs.task }}"
+            # Fallback, falls Datei fehlt (sollte durch Step oben vorhanden sein)
+            [ -f .firefly_commit.txt ] || echo "bot: changes ${GITHUB_RUN_ID}" > .firefly_commit.txt
+            git commit -F .firefly_commit.txt || echo "No changes to commit."
           else
             echo "No changes to commit."
           fi
@@ -69,17 +82,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}   # für gh pr create
         run: |
+          # Nur wenn es neue Commits gegenüber main gibt
           if [ -z "$(git log origin/main..HEAD --oneline || true)" ]; then
             echo "No new commits; skipping PR creation."
             exit 0
           fi
+
           BRANCH="bot/${GITHUB_RUN_ID}"
           git checkout -B "$BRANCH"
+
+          # Push mit Bot-PAT
           git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
           git push -u origin "$BRANCH"
-          gh pr create \
-            --title "bot: ${{ inputs.task }}" \
-            --body "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
-            --head "$BRANCH" \
-            --base "main" \
-            --repo glitzereinhorn270487/firefly
+
+          # PR mit sicherem Title + Body aus Datei (falls verfügbar)
+          if [ -f .firefly_task.txt ]; then
+            gh pr create \
+              --title "$(cat .firefly_title.txt)" \
+              --body-file .firefly_task.txt \
+              --head "$BRANCH" \
+              --base "main" \
+              --repo glitzereinhorn270487/firefly
+          else
+            gh pr create \
+              --title "bot: task ${GITHUB_RUN_ID}" \
+              --body "Automated PR by firefly-bot" \
+              --head "$BRANCH" \
+              --base "main" \
+              --repo glitzereinhorn270487/firefly
+          fi
