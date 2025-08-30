@@ -57,8 +57,9 @@ jobs:
       - name: Push als firefly-bot (nur wenn Token vorhanden)
         if: ${{ env.FIREFLY_BOT_TOKEN != '' }}
         run: |
-          git remote set-url origin https://firefly-bot:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
+          git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
           git push
+
 
       - name: Hinweis, falls kein Bot-Token gesetzt ist
         if: ${{ env.FIREFLY_BOT_TOKEN == '' }}
