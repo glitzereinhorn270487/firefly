@@ -54,11 +54,14 @@ jobs:
             echo "No changes to commit."
           fi
 
-      - name: Push als firefly-bot (nur wenn Token vorhanden)
-        if: ${{ env.FIREFLY_BOT_TOKEN != ' }}
+      - name: Push als firefly-bot (Branch + PR)
+        if: ${{ env.FIREFLY_BOT_TOKEN != '' }}
         run: |
+          git checkout -B bot/${GITHUB_RUN_ID}
           git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
-          git push
+          git push -u origin bot/${GITHUB_RUN_ID}
+          gh pr create --fill --head bot/${GITHUB_RUN_ID}
+
 
 
       - name: Hinweis, falls kein Bot-Token gesetzt ist
