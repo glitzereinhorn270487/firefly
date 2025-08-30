@@ -1,0 +1,53 @@
+name: Agent loop: comment CI failures to PR
+
+on:
+  workflow_run:
+    workflows: ["CI"]        # Name eures CI-Workflows (siehe 'name:' in ci.yml)
+    types: [completed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  comment-on-failure:
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment failing jobs on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            if (!run.pull_requests || run.pull_requests.length === 0) {
+              core.info('No associated PR; skipping.');
+              return;
+            }
+            const pr = run.pull_requests[0];
+
+            const { data } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: run.id,
+            });
+
+            const failing = (data.jobs || [])
+              .filter(j => ['failure','cancelled','timed_out'].includes(j.conclusion || ''))
+              .map(j => `• **${j.name}** → \`${j.conclusion}\``)
+              .join('\n');
+
+            const body = `
+**Automatische Notiz**
+
+CI ist fehlgeschlagen für Commit \`${run.head_sha.slice(0,7)}\`.
+${failing || 'Siehe Run-Details für Fehler.'}
+
+Bitte **weiter iterieren**, bis CI grün ist.
+Run-URL: ${run.html_url}
+`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body
+            });
