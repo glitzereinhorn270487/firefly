@@ -55,7 +55,7 @@ jobs:
           fi
 
       - name: Push als firefly-bot (nur wenn Token vorhanden)
-        if: ${{ env.FIREFLY_BOT_TOKEN != '' }}
+        if: ${{ env.FIREFLY_BOT_TOKEN != ' }}
         run: |
           git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
           git push
@@ -65,3 +65,4 @@ jobs:
         if: ${{ env.FIREFLY_BOT_TOKEN == '' }}
         run: |
           echo "::warning:: FIREFLY_BOT_TOKEN secret fehlt  Push übersprungen."
+
