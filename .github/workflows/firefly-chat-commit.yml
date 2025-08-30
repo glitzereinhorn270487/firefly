@@ -56,11 +56,18 @@ jobs:
 
       - name: Push als firefly-bot (Branch + PR)
         if: ${{ env.FIREFLY_BOT_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}   # für gh pr create
         run: |
-          git checkout -B bot/${GITHUB_RUN_ID}
+          set -e
+          BRANCH="bot/${GITHUB_RUN_ID}"
+          git checkout -B "$BRANCH"
+          # 👉 PAT für den Push hinterlegen (wichtig!)
           git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
-          git push -u origin bot/${GITHUB_RUN_ID}
-          gh pr create --fill --head bot/${GITHUB_RUN_ID}
+          git push -u origin "$BRANCH"
+          # PR mit dem eingebauten Actions-Token erstellen
+          gh pr create --fill --head "$BRANCH"
+
 
 
 
