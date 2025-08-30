@@ -1,4 +1,4 @@
-name: Firefly Chat Commit
+﻿name: Firefly Chat Commit
 
 on:
   workflow_dispatch:
@@ -14,8 +14,6 @@ permissions:
 jobs:
   build-and-commit:
     runs-on: ubuntu-latest
-
-    # 👉 Secrets einmal in env spiegeln
     env:
       FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
       OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
@@ -65,4 +63,4 @@ jobs:
       - name: Hinweis, falls kein Bot-Token gesetzt ist
         if: ${{ env.FIREFLY_BOT_TOKEN == '' }}
         run: |
-          echo "::warning:: FIREFLY_BOT_TOKEN secret fehlt – Push übersprungen."
+          echo "::warning:: FIREFLY_BOT_TOKEN secret fehlt  Push übersprungen."
