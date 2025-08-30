@@ -18,7 +18,8 @@
     "jest": "^29.6.0",
     "typescript": "^5.9.2"
   },
-  "engines": {
-    "node": "18.x"
+  "engines": { "node": "22.x" },
+"packageManager": "npm@10"
+
   }
 }
