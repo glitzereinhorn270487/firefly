@@ -1,4 +1,5 @@
 name: Firefly Chat Commit
+
 on:
   workflow_dispatch:
     inputs:
@@ -6,39 +7,62 @@ on:
         description: "Was soll der Bot im Code tun?"
         required: true
         type: string
+
 permissions:
   contents: write
+
 jobs:
   build-and-commit:
     runs-on: ubuntu-latest
+
+    # 👉 Secrets einmal in env spiegeln
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+      OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout (ohne Default-Creds)
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - run: |
+
+      - name: Git-User setzen (firefly-bot)
+        run: |
           git config user.name "firefly-bot"
           git config user.email "firefly-bot@users.noreply.github.com"
-      - uses: actions/setup-python@v5
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Aider installieren (optional)
-        if: ${{ secrets.OPENAI_API_KEY != '' }}
+        if: ${{ env.OPENAI_API_KEY != '' }}
         run: |
           python -m pip install --upgrade pip
           pip install "aider-chat>=0.60"
-      - name: Code-�nderungen aus Task erzeugen (optional)
-        if: ${{ secrets.OPENAI_API_KEY != '' }}
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+      - name: Code-Änderungen aus Task erzeugen (optional)
+        if: ${{ env.OPENAI_API_KEY != '' }}
         run: |
           aider --yes --message "${{ inputs.task }}" --commit --no-gitignore || true
-      - name: Commit & Push als firefly-bot
-        env:
-          BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+      - name: Commit (falls Änderungen)
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "bot: ${{ inputs.task }}"
+          else
+            echo "No changes to commit."
           fi
-          git remote set-url origin https://firefly-bot:${BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
-          git push || true
+
+      - name: Push als firefly-bot (nur wenn Token vorhanden)
+        if: ${{ env.FIREFLY_BOT_TOKEN != '' }}
+        run: |
+          git remote set-url origin https://firefly-bot:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
+          git push
+
+      - name: Hinweis, falls kein Bot-Token gesetzt ist
+        if: ${{ env.FIREFLY_BOT_TOKEN == '' }}
+        run: |
+          echo "::warning:: FIREFLY_BOT_TOKEN secret fehlt – Push übersprungen."
