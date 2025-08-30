@@ -54,28 +54,16 @@ jobs:
             echo "No changes to commit."
           fi
 
-      - name: Push als firefly-bot (Branch + PR)
+      - name: Push als firefly-bot (DIRECT)
         if: ${{ env.FIREFLY_BOT_TOKEN != '' }}
-        env:
-          GH_TOKEN: ${{ github.token }}   # für gh pr create
         run: |
           set -e
-          BRANCH="bot/${GITHUB_RUN_ID}"
-          git checkout -B "$BRANCH"
-          # Push mit Bot-PAT
           git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/glitzereinhorn270487/firefly.git
-          git push -u origin "$BRANCH"
-          # PR mit dem Actions-Token
-          gh pr create --fill --head "$BRANCH" --repo glitzereinhorn270487/firefly
-
-
-
-
-
+          git remote -v
+          echo "Token length (masked): ${#FIREFLY_BOT_TOKEN}"
+          git push origin HEAD:refs/heads/main
 
       - name: Hinweis, falls kein Bot-Token gesetzt ist
         if: ${{ env.FIREFLY_BOT_TOKEN == '' }}
         run: |
           echo "::warning:: FIREFLY_BOT_TOKEN secret fehlt  Push übersprungen."
-
-
