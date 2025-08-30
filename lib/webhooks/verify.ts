@@ -8,8 +8,8 @@ function pickSecret() {
   return (
     process.env.QN_PUMPFUN_TOKEN ||
     process.env.QN_RAYDIUM_TOKEN ||
-    process.env.QN_STREAMS_TOKEN ||
-    process.env.QUICKNODE_STREAMS_TOKEN ||
+    process.env.QN_WEBHOOK_TOKEN ||
+  
     ''
   );
 }
