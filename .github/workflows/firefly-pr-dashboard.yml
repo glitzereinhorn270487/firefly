@@ -1,0 +1,100 @@
+name: Firefly PR - Dashboard
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-dashboard:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create Dashboard
+        run: |
+          mkdir -p src/lib app/dashboard components
+
+          # src/lib/status.ts
+          cat > src/lib/status.ts <<'EOF'
+          export function getAgentStatus() {
+            return { ok: true, lastHeartbeat: new Date().toISOString() };
+          }
+          EOF
+
+          # components/AgentStatusBadge.tsx
+          cat > components/AgentStatusBadge.tsx <<'EOF'
+          export default function AgentStatusBadge({ ok }: { ok: boolean }) {
+            return (
+              <span style={{ color: ok ? "green" : "red" }}>
+                {ok ? "Running" : "Offline"}
+              </span>
+            );
+          }
+          EOF
+
+          # components/AgentControls.tsx
+          cat > components/AgentControls.tsx <<'EOF'
+          export default function AgentControls() {
+            return (
+              <div>
+                <button>Start</button>
+                <button>Stop</button>
+              </div>
+            );
+          }
+          EOF
+
+          # Dashboard page
+          cat > app/dashboard/page.tsx <<'EOF'
+          import { getAgentStatus } from "@/src/lib/status";
+          import AgentStatusBadge from "@/components/AgentStatusBadge";
+          import AgentControls from "@/components/AgentControls";
+
+          export default function DashboardPage() {
+            const status = getAgentStatus();
+            return (
+              <div>
+                <h1>Firefly Dashboard</h1>
+                <AgentStatusBadge ok={status.ok} />
+                <AgentControls />
+              </div>
+            );
+          }
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add src/lib app/dashboard components
+          git commit -m "feat(dashboard): add dashboard page with status + controls" || echo "No changes"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/dashboard-${GITHUB_RUN_ID}"
+          git push "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "feat(dashboard): add dashboard page with status + controls" \
+            --body "Automated PR: adds dashboard with status badge + controls." \
+            --base main \
+            --head "${{ env.branch }}" \
+            || echo "PR already exists"
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
