@@ -47,13 +47,14 @@ jobs:
           git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GH_REPO}.git
           git push -u origin "$BRANCH"
 
-      - name: PR erstellen (mit GITHUB_TOKEN)
+      - name: PR erstellen (mit BOT PAT)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}  # <- statt GITHUB_TOKEN den PAT nutzen
         run: |
-          gh pr create \
-            --title "bot: ${{ inputs.task }}" \
-            --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
-            --base  main \
-            --head  "bot/${GITHUB_RUN_ID}"
+         gh pr create \
+         --title "bot: ${{ inputs.task }}" \
+         --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
+         --base  main \
+         --head  "bot/${GITHUB_RUN_ID}"
+
             
