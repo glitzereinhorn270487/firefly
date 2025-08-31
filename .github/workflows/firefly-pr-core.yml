@@ -1,0 +1,105 @@
+name: Firefly PR - Core Setup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-core:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create/Update Core Files
+        run: |
+          # tsconfig.json
+          cat > tsconfig.json <<'EOF'
+          {
+            "compilerOptions": {
+              "target": "es5",
+              "lib": ["dom", "dom.iterable", "esnext"],
+              "allowJs": true,
+              "skipLibCheck": true,
+              "strict": true,
+              "forceConsistentCasingInFileNames": true,
+              "noEmit": true,
+              "esModuleInterop": true,
+              "module": "esnext",
+              "moduleResolution": "node",
+              "resolveJsonModule": true,
+              "isolatedModules": true,
+              "jsx": "preserve",
+              "incremental": true,
+              "baseUrl": ".",
+              "paths": {
+                "@/*": ["*"],
+                "@/src/*": ["src/*"],
+                "@/components/*": ["components/*"]
+              }
+            },
+            "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+            "exclude": ["node_modules"]
+          }
+          EOF
+
+          # next.config.js
+          cat > next.config.js <<'EOF'
+          /** @type {import('next').NextConfig} */
+          const nextConfig = {
+            experimental: {
+              typedRoutes: true
+            }
+          };
+          export default nextConfig;
+          EOF
+
+          # .eslintrc.json
+          cat > .eslintrc.json <<'EOF'
+          {
+            "extends": ["next/core-web-vitals"]
+          }
+          EOF
+
+          # package.json (nur Scripts ergänzen/fixen)
+          if [ -f package.json ]; then
+            tmp=$(mktemp)
+            cat package.json | jq '.scripts.dev = "next dev" | .scripts.build = "next build" | .scripts.start = "next start" | .scripts.lint = "next lint"' > $tmp
+            mv $tmp package.json
+          fi
+
+      - name: Commit changes
+        run: |
+          git add tsconfig.json next.config.js .eslintrc.json package.json
+          git commit -m "chore(core): add tsconfig, next.config, eslint, scripts" || echo "No changes to commit"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/core-${GITHUB_RUN_ID}"
+          git push "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "chore(core): setup tsconfig, next.config, eslint, scripts" \
+            --body "Automated PR to add core Next.js + TS setup files" \
+            --base main \
+            --head "${{ env.branch }}" \
+            || echo "PR already exists"
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
