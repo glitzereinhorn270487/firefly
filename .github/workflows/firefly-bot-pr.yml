@@ -15,6 +15,9 @@ permissions:
 jobs:
   bot:
     runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,12 +30,17 @@ jobs:
           git config user.name "firefly-bot"
           git config user.email "firefly-bot@users.noreply.github.com"
 
-      - name: Commit task marker (kleine, sichere Änderungen)
+      - name: Commit task marker + README update
         run: |
           echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
           printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
           printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
-          git add .firefly_*.txt
+          
+          # README ändern
+          DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          echo "🤖 Update durch Firefly-Bot am $DATE" >> README.md
+
+          git add .firefly_*.txt README.md
           git commit -m "bot: ${{ inputs.task }}"
 
       - name: Push Branch mit PAT
@@ -46,17 +54,17 @@ jobs:
           # Aktuellen Stand von main holen
           git fetch origin main --quiet
 
-          # Eindeutiger Branch-Name pro Run UND Attempt (Fix für Re-run)
+          # Eindeutiger Branch-Name pro Run UND Attempt
           BRANCH="bot/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git checkout -B "$BRANCH"
 
           # Auf neuesten main rebasen (keine Merge-Commits)
           git rebase origin/main || true
 
-          # Push (neu anlegen oder aktualisieren)
+          # Push
           git push -u origin "$BRANCH" --force-with-lease
 
-          # Branch-Namen für den nächsten Schritt ausgeben
+          # Branch für nächsten Schritt merken
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: PR erstellen (mit BOT PAT)
