@@ -1,0 +1,78 @@
+name: Firefly PR - Dashboard: Paper Positions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-dashboard-positions:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Add Paper Positions Endpoint
+        run: |
+          mkdir -p app/api/paper/positions
+          mkdir -p app/dashboard
+          mkdir -p components
+
+          # API-Route für Paper Positions
+          cat > app/api/paper/positions/route.ts <<'EOF'
+          import { NextResponse } from "next/server";
+
+          export async function GET() {
+            return NextResponse.json({
+              positions: [],
+              message: "Paper positions stub"
+            });
+          }
+          EOF
+
+          # Dashboard-Komponente erweitern
+          cat > app/dashboard/page.tsx <<'EOF'
+          export default function DashboardPage() {
+            return (
+              <main>
+                <h1>Paper Trader Dashboard</h1>
+                <p>Positions (Stub)</p>
+              </main>
+            );
+          }
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add .
+          git commit -m "feat(api): add paper positions endpoint stub"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/pr-dashboard-positions-${GITHUB_RUN_ID}"
+          git push -u origin HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          gh pr create \
+            --title "feat(api): add paper positions endpoint stub" \
+            --body "Automated PR for paper positions API + dashboard stub" \
+            --base main \
+            --head "${{ env.branch }}" \
+          || echo "PR existiert schon"
