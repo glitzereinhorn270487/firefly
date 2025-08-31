@@ -1,4 +1,4 @@
-name: Firefly PR - Dashboard: Paper Trader Integration
+name: Firefly PR - Dashboard:Paper Trader Integration
 
 on:
   workflow_dispatch:
