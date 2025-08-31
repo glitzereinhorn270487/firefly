@@ -1,0 +1,80 @@
+name: Firefly Chat Commit
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Was soll der Bot im Code tun?"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+      OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
+
+    steps:
+      - name: Checkout (ohne Default-Creds)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git-User setzen (firefly-bot)
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: (Optional) Aider installieren
+        if: ${{ env.OPENAI_API_KEY != '' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - if: ${{ env.OPENAI_API_KEY != '' }}
+        run: |
+          python -m pip install --upgrade pip
+          pip install "aider-chat>=0.86"
+
+      - name: (Optional) Code-Änderungen aus Task erzeugen
+        if: ${{ env.OPENAI_API_KEY != '' }}
+        run: |
+          aider --yes --message "${{ inputs.task }}" --commit --no-gitignore || true
+
+      - name: Commit (falls Änderungen)
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "bot: ${{ inputs.task }}"
+          else
+            echo "No changes to commit."
+          fi
+
+      - name: Branch pushen und PR erstellen (nur wenn Änderungen)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git log origin/main..HEAD --oneline || true)" ]; then
+            echo "No new commits; skipping PR creation."
+            exit 0
+          fi
+
+          BRANCH="bot/${GITHUB_RUN_ID}"
+          git checkout -B "$BRANCH"
+
+          # Push mit Bot-PAT
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${{ github.repository }}.git"
+          git push -u origin "$BRANCH"
+
+          # PR mit Actions-Token
+          gh pr create \
+            --title "bot: ${{ inputs.task }}" \
+            --body "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
+            --head "$BRANCH" \
+            --base "main" \
+            --repo "${{ github.repository }}"
