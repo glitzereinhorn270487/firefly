@@ -30,18 +30,35 @@ jobs:
           git config user.name "firefly-bot"
           git config user.email "firefly-bot@users.noreply.github.com"
 
-      - name: Commit task marker + README update
+      - name: Create QuickNode webhook receiver
         run: |
-          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
-          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
-          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
-          
-          # README ändern
-          DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          echo "🤖 Update durch Firefly-Bot am $DATE" >> README.md
+          mkdir -p app/api/webhooks/quicknode
+          cat <<'EOF' > app/api/webhooks/quicknode/route.ts
+          import { NextRequest, NextResponse } from "next/server";
 
-          git add .firefly_*.txt README.md
-          git commit -m "bot: ${{ inputs.task }}"
+          function forbidden() {
+            return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+          }
+
+          export async function GET(req: NextRequest) {
+            const qp = req.nextUrl.searchParams.get("token") ?? "";
+            const hv = req.headers.get("x-qn-token") ?? "";
+            if (!qp || qp !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
+            if (!hv || hv !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
+            return NextResponse.json({ ok: true });
+          }
+
+          export async function POST(req: NextRequest) {
+            try {
+              const payload = await req.json();
+              console.log("QN event", JSON.stringify(payload));
+              return NextResponse.json({ ok: true });
+            } catch {
+              return NextResponse.json({ ok: false, error: "Bad JSON" }, { status: 400 });
+            }
+          }
+          EOF
+
 
       - name: Push Branch mit PAT
         id: push_branch
