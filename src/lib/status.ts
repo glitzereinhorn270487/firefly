@@ -1,6 +1,3 @@
-export type AgentStatus = "idle" | "running" | "error";
-
-export function getAgentStatus(): AgentStatus {
-  // Stub logic
-  return "idle";
+export function getAgentStatus() {
+  return { ok: true, lastHeartbeat: new Date().toISOString() };
 }
