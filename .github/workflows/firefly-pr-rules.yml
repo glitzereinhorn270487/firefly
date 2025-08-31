@@ -1,0 +1,89 @@
+name: Firefly PR - Rules API + Stubs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-rules:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create Rules stubs
+        run: |
+          mkdir -p src/rules app/api/rules app/settings/rules
+
+          # src/rules/index.ts
+          cat > src/rules/index.ts <<'EOF'
+          export type Rule = {
+            id: string;
+            name: string;
+            condition: string;
+            enabled: boolean;
+          };
+
+          export const sampleRules: Rule[] = [
+            { id: "1", name: "Risk Check", condition: "position.size < 1000", enabled: true },
+            { id: "2", name: "Stop Loss", condition: "price < entry * 0.9", enabled: true }
+          ];
+          EOF
+
+          # API route
+          cat > app/api/rules/route.ts <<'EOF'
+          import { NextResponse } from "next/server";
+          import { sampleRules } from "@/src/rules";
+
+          export async function GET() {
+            return NextResponse.json({ rules: sampleRules });
+          }
+          EOF
+
+          # Settings page
+          cat > app/settings/rules/page.tsx <<'EOF'
+          export default function RulesPage() {
+            return (
+              <div>
+                <h1>Trading Rules</h1>
+                <p>Rules management will be implemented here.</p>
+              </div>
+            );
+          }
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add src/rules app/api/rules app/settings/rules
+          git commit -m "feat(rules): add rules stubs + API route" || echo "No changes"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/rules-${GITHUB_RUN_ID}"
+          git push "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "feat(rules): add rules stubs + API" \
+            --body "Automated PR: adds \`src/rules\`, API endpoint \`/api/rules\` and settings page stub." \
+            --base main \
+            --head "${{ env.branch }}" \
+            || echo "PR already exists"
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
