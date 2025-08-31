@@ -1,0 +1,135 @@
+name: Firefly PR - Trading Engine + Paper Trader
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-engine:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create Trading Engine + Paper Trader
+        run: |
+          mkdir -p src/engine src/lib
+
+          # Trading Engine Stub
+          cat > src/engine/tradingEngine.ts <<'EOF'
+          import { applyRules } from "../rules";
+
+          export interface TradeDecision {
+            action: "buy" | "sell" | "hold";
+            reason: string;
+            score?: number;
+          }
+
+          export async function runTradingEngine(event: any): Promise<TradeDecision> {
+            // Placeholder: apply rules to incoming event
+            const decision = await applyRules(event);
+
+            // TODO: risk management, capital allocation, logging
+            return decision;
+          }
+          EOF
+
+          # Paper Trader Stub
+          cat > src/engine/paperTrader.ts <<'EOF'
+          import { TradeDecision } from "./tradingEngine";
+
+          export interface PaperPosition {
+            token: string;
+            amount: number;
+            entryPrice: number;
+            timestamp: number;
+          }
+
+          const positions: PaperPosition[] = [];
+
+          export async function executePaperTrade(decision: TradeDecision, token: string, price: number) {
+            if (decision.action === "buy") {
+              positions.push({ token, amount: 1, entryPrice: price, timestamp: Date.now() });
+              console.log("Paper BUY", token, "@", price);
+            }
+            if (decision.action === "sell") {
+              const idx = positions.findIndex(p => p.token === token);
+              if (idx >= 0) {
+                const pos = positions.splice(idx, 1)[0];
+                const pnl = price - pos.entryPrice;
+                console.log("Paper SELL", token, "@", price, "PnL:", pnl);
+              }
+            }
+          }
+
+          export function listPaperPositions() {
+            return positions;
+          }
+          EOF
+
+          # API endpoint to trigger engine
+          mkdir -p app/api/trade
+          cat > app/api/trade/route.ts <<'EOF'
+          import { NextRequest, NextResponse } from "next/server";
+          import { runTradingEngine } from "@/src/engine/tradingEngine";
+          import { executePaperTrade } from "@/src/engine/paperTrader";
+
+          export async function POST(req: NextRequest) {
+            try {
+              const body = await req.json();
+              const decision = await runTradingEngine(body);
+
+              // Simulate paper trade
+              await executePaperTrade(decision, body.token || "unknown", body.price || 0);
+
+              return NextResponse.json({ ok: true, decision });
+            } catch (e) {
+              return NextResponse.json({ ok: false, error: String(e) }, { status: 400 });
+            }
+          }
+          EOF
+
+          # README docs
+          cat >> README.md <<'EOF'
+
+          ## Trading Engine + Paper Trader
+          - `src/engine/tradingEngine.ts`: applies rules to events
+          - `src/engine/paperTrader.ts`: simulates trades
+          - Endpoint: `POST /api/trade` with `{ token, price, ...event }`
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add src app/api/trade README.md
+          git commit -m "feat(engine): add trading engine + paper trader stubs" || echo "No changes"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/engine-${GITHUB_RUN_ID}"
+          git push "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "feat(engine): add trading engine + paper trader stubs" \
+            --body "Automated PR: adds trading engine (rules → decisions) and paper trader simulator with API endpoint." \
+            --base main \
+            --head "${{ env.branch }}" \
+            || echo "PR already exists"
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
