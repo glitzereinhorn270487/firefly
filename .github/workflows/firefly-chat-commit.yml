@@ -41,10 +41,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install "aider-chat>=0.86"
 
-      - name: (Optional) Code-Änderungen aus Task erzeugen
+           - name: Code-Änderungen aus Task erzeugen (optional)
         if: ${{ env.OPENAI_API_KEY != '' }}
+        shell: bash
         run: |
-          aider --yes --message "${{ inputs.task }}" --commit --no-gitignore || true
+          set -euo pipefail
+          MSG_FILE="$(mktemp)"
+          # Schreibe die UI-Eingabe wörtlich (keine Expansion) in eine Datei:
+          cat > "$MSG_FILE" <<'TASK'
+          ${{ inputs.task }}
+          TASK
+
+          # Optional: Aider installieren, falls du das im separaten Schritt nicht machst
+          # python -m pip install --upgrade pip
+          # pip install "aider-chat>=0.86"
+
+          # Inhalt der Datei sicher als ein Argument übergeben
+          aider --yes --no-gitignore --commit --message "$(cat "$MSG_FILE")" || true
+
 
       - name: Commit (falls Änderungen)
         run: |
