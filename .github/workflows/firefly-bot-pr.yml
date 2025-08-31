@@ -38,14 +38,32 @@ jobs:
           git add .firefly_*.txt
           git commit -m "bot: ${{ inputs.task }}"
 
+
       - name: Push Branch mit PAT
-        env:
-          GH_REPO: ${{ github.repository }}
-        run: |
-          BRANCH="bot/${GITHUB_RUN_ID}"
-          git checkout -b "$BRANCH"
-          git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GH_REPO}.git
-          git push -u origin "$BRANCH"
+        if: ${{ success() }}  # optional: nur wenn vorher alles ok
+        id: push_branch
+          env:
+    FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+  run: |
+    set -e
+    git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+    # Aktuellen Stand von main holen
+    git fetch origin main --quiet
+
+    # Eindeutiger Branch-Name pro Run UND Attempt (Fix für Re-run)
+    BRANCH="bot/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+    git checkout -B "$BRANCH"
+
+    # Auf neuesten main rebasen (keine Merge-Commits)
+    git rebase origin/main || true
+
+    # Push (neu anlegen oder aktualisieren)
+    git push -u origin "$BRANCH" --force-with-lease
+
+    # Branch-Namen für den nächsten Schritt ausgeben
+    echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
 
       - name: PR erstellen (mit BOT PAT)
         env:
