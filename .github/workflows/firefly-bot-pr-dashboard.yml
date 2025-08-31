@@ -1,0 +1,218 @@
+name: Firefly Bot PR - Dashboard + Health
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Kurzbeschreibung (z.B. 'Dashboard + Health endpoint')"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name  "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create files (health api, libs, components, dashboard)
+        run: |
+          set -euo pipefail
+
+          mkdir -p app/api/health
+          mkdir -p app/dashboard
+          mkdir -p components
+          mkdir -p src/lib
+
+          cat <<'EOF' > app/api/health/route.ts
+          import { NextResponse } from "next/server";
+
+          export async function GET() {
+            // super-simpler Health-Check; erweitere bei Bedarf (DB, Redis, etc.)
+            return NextResponse.json({
+              ok: true,
+              ts: Date.now(),
+              env: process.env.NODE_ENV,
+            });
+          }
+          EOF
+
+          cat <<'EOF' > src/lib/status.ts
+          export type Health = { ok: boolean; ts: number; env?: string };
+
+          export async function fetchHealth(base = ""): Promise<Health> {
+            try {
+              const res = await fetch(`${base}/api/health`, { cache: "no-store" });
+              if (!res.ok) throw new Error("health not ok");
+              return (await res.json()) as Health;
+            } catch {
+              return { ok: false, ts: Date.now() };
+            }
+          }
+          EOF
+
+          cat <<'EOF' > components/AgentStatusBadge.tsx
+          "use client";
+          import * as React from "react";
+
+          export function AgentStatusBadge({ ok }: { ok: boolean }) {
+            const color = ok ? "#16a34a" : "#dc2626";
+            const text  = ok ? "healthy" : "unhealthy";
+            return (
+              <span style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "4px 10px",
+                borderRadius: 999,
+                background: "#111",
+                color: "#fff",
+                fontSize: 12
+              }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: 999, background: color
+                }} />
+                Agent is {text}
+              </span>
+            );
+          }
+          EOF
+
+          cat <<'EOF' > components/AgentControls.tsx
+          "use client";
+          import * as React from "react";
+
+          export function AgentControls() {
+            return (
+              <div style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap"
+              }}>
+                <button
+                  style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #333", background: "#18181b", color:"#fff", cursor:"pointer" }}
+                  onClick={() => alert("Start (demo)")}>
+                  ▶ Start
+                </button>
+                <button
+                  style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #333", background: "#18181b", color:"#fff", cursor:"pointer" }}
+                  onClick={() => alert("Stop (demo)")}>
+                  ⏸ Stop
+                </button>
+                <button
+                  style={{ padding: "8px 12px", borderRadius: 10, border: "1px solid #333", background: "#18181b", color:"#fff", cursor:"pointer" }}
+                  onClick={() => alert("Refresh (demo)")}>
+                  ⟳ Refresh
+                </button>
+              </div>
+            );
+          }
+          EOF
+
+          cat <<'EOF' > app/dashboard/page.tsx
+          import { fetchHealth } from "@/src/lib/status";
+          import { AgentStatusBadge } from "@/components/AgentStatusBadge";
+          import { AgentControls } from "@/components/AgentControls";
+
+          export const dynamic = "force-dynamic";
+
+          export default async function DashboardPage() {
+            const health = await fetchHealth();
+            const date = new Date(health.ts).toLocaleString();
+
+            return (
+              <main style={{
+                maxWidth: 900,
+                margin: "40px auto",
+                padding: "0 16px",
+                color: "#e5e7eb",
+                fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+              }}>
+                <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16 }}>Firefly Dashboard</h1>
+
+                <section style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr",
+                  gap: 16
+                }}>
+                  <div style={{ padding: 16, border: "1px solid #27272a", borderRadius: 14, background: "#0b0b0c" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Agent status</h2>
+                      <AgentStatusBadge ok={health.ok} />
+                    </div>
+                    <div style={{ fontSize: 14, color: "#a1a1aa" }}>
+                      last check: {date} · env: {health.env ?? "n/a"}
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 16, border: "1px solid #27272a", borderRadius: 14, background: "#0b0b0c" }}>
+                    <h2 style={{ fontSize: 18, fontWeight: 600, marginTop: 0 }}>Controls</h2>
+                    <AgentControls />
+                  </div>
+                </section>
+              </main>
+            );
+          }
+          EOF
+
+          # README-Ergänzung
+          touch README.md
+          cat <<'EOF' >> README.md
+
+          ## Dashboard
+
+          - Seite: `/dashboard`
+          - Health-Endpoint: `/api/health`
+          - Komponenten: `AgentStatusBadge`, `AgentControls` (Demo)
+
+          EOF
+
+      - name: Commit
+        run: |
+          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
+          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
+          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
+
+          git add app/api/health/route.ts src/lib/status.ts components/AgentStatusBadge.tsx components/AgentControls.tsx app/dashboard/page.tsx README.md .firefly_*.txt
+          git commit -m "feat(dashboard): add /dashboard, health endpoint, basic components — ${{ inputs.task }}"
+
+      - name: Push Branch with PAT
+        id: push_branch
+        env:
+          FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch origin main --quiet
+          BRANCH="bot/dashboard-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git checkout -B "$BRANCH"
+          git rebase origin/main || true
+          git push -u origin "$BRANCH" --force-with-lease
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR (with BOT PAT)
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --title "bot: Dashboard + Health" \
+            --body  "Automated PR by firefly-bot\n\nAdds:\n- /api/health\n- /dashboard\n- components (AgentStatusBadge, AgentControls)\n- README section" \
+            --base  main \
+            --head  "${{ steps.push_branch.outputs.branch }}" \
+          || echo "PR existiert vermutlich schon – ok."
