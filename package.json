@@ -20,5 +20,7 @@
     "eslint": "8.57.0",
     "eslint-config-next": "14.2.3"
   },
-  "engines": { "node": ">=18.18 <=22" }
+  "engines": {
+    "node": ">=18.18 <=22"
+  }
 }
