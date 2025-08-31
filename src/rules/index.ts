@@ -1,16 +1,11 @@
 export type Rule = {
   id: string;
   name: string;
-  description: string;
-  active: boolean;
+  condition: string;
+  enabled: boolean;
 };
 
-// Dummy rules for now
-export const rules: Rule[] = [
-  { id: "momentum", name: "Momentum", description: "Entry when momentum strong", active: true },
-  { id: "liqburn", name: "Liquidity Burn", description: "Monitor LIQ burn + holder distribution", active: false },
+export const sampleRules: Rule[] = [
+  { id: "1", name: "Risk Check", condition: "position.size < 1000", enabled: true },
+  { id: "2", name: "Stop Loss", condition: "price < entry * 0.9", enabled: true }
 ];
-
-export function getRules(): Rule[] {
-  return rules;
-}
