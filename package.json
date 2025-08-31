@@ -1,0 +1,27 @@
+{
+  "name": "firefly",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.2.3",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/react": "18.2.14",
+    "@types/node": "20.11.19",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.3"
+  },
+  "engines": {
+    "node": "22.x"
+  },
+  "packageManager": "npm@10"
+}

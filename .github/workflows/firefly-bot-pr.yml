@@ -1,0 +1,80 @@
+name: Firefly Bot PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Was soll der Bot machen? (Freitext)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Commit task marker + README update
+        run: |
+          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
+          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
+          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
+          
+          # README ändern
+          DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          echo "🤖 Update durch Firefly-Bot am $DATE" >> README.md
+
+          git add .firefly_*.txt README.md
+          git commit -m "bot: ${{ inputs.task }}"
+
+      - name: Push Branch mit PAT
+        id: push_branch
+        env:
+          FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -e
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          # Aktuellen Stand von main holen
+          git fetch origin main --quiet
+
+          # Eindeutiger Branch-Name pro Run UND Attempt
+          BRANCH="bot/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git checkout -B "$BRANCH"
+
+          # Auf neuesten main rebasen (keine Merge-Commits)
+          git rebase origin/main || true
+
+          # Push
+          git push -u origin "$BRANCH" --force-with-lease
+
+          # Branch für nächsten Schritt merken
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: PR erstellen (mit BOT PAT)
+        if: ${{ steps.push_branch.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          gh pr create \
+            --title "bot: ${{ inputs.task || 'Automated update' }}" \
+            --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task || 'N/A' }}" \
+            --base  main \
+            --head  "${{ steps.push_branch.outputs.branch }}" \
+          || echo "PR existiert vermutlich schon – ok."
