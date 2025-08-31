@@ -1,4 +1,5 @@
-name: Firefly PR - Dashboard: Paper Positions
+name: "Firefly PR - Dashboard: Paper Positions"
+
 
 on:
   workflow_dispatch:
