@@ -1,0 +1,138 @@
+name: Firefly Bot PR - QuickNode webhook
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Kurzbeschreibung (z.B. 'Webhook-Receiver QN + Test')"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name  "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create webhook receiver + test route
+        run: |
+          set -euo pipefail
+
+          mkdir -p app/api/webhooks/quicknode
+          mkdir -p app/api/webhooks/test
+
+          # ---- app/api/webhooks/quicknode/route.ts
+          cat <<'EOF' > app/api/webhooks/quicknode/route.ts
+          import { NextResponse } from "next/server";
+
+          function forbidden(msg: string = "Forbidden") {
+            return NextResponse.json({ ok: false, error: msg }, { status: 403 });
+          }
+
+          export async function POST(req: Request) {
+            const token = req.headers.get("x-qn-token") ?? "";
+            if (!token || token !== process.env.QN_WEBHOOK_TOKEN) {
+              return forbidden("Invalid token");
+            }
+
+            try {
+              const payload = await req.json();
+              console.log("[QN event]", payload);
+
+              // TODO: Filter Raydium creation events
+              return NextResponse.json({ ok: true });
+            } catch (e) {
+              return NextResponse.json({ ok: false, error: "Bad JSON" }, { status: 400 });
+            }
+          }
+          EOF
+
+          # ---- app/api/webhooks/test/route.ts
+          cat <<'EOF' > app/api/webhooks/test/route.ts
+          import { NextResponse } from "next/server";
+
+          export async function GET() {
+            return NextResponse.json({
+              ok: true,
+              now: Date.now(),
+              token: process.env.QN_WEBHOOK_TOKEN ? "set" : "missing",
+            });
+          }
+          EOF
+
+          # ---- .env.example (hinzufügen)
+          touch .env.example
+          cat <<'EOF' >> .env.example
+
+          # QuickNode webhook token (setzen in Vercel/GitHub Secrets)
+          QN_WEBHOOK_TOKEN=change-me
+          EOF
+
+          # ---- README Ergänzung
+          touch README.md
+          cat <<'EOF' >> README.md
+
+          ## Webhooks
+
+          - **QuickNode Receiver**: `POST /api/webhooks/quicknode`
+            - prüft Header `x-qn-token` gegen `process.env.QN_WEBHOOK_TOKEN`
+            - Payload wird geloggt
+          - **Test-Route**: `GET /api/webhooks/test` → liefert Zeit + ob Token gesetzt ist
+          EOF
+
+      - name: Commit
+        run: |
+          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
+          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
+          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
+
+          git add \
+            app/api/webhooks/quicknode/route.ts \
+            app/api/webhooks/test/route.ts \
+            .env.example \
+            README.md \
+            .firefly_*.txt
+
+          git commit -m "feat(api): add QuickNode webhook receiver + test route — ${{ inputs.task }}"
+
+      - name: Push Branch with PAT
+        id: push_branch
+        env:
+          FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch origin main --quiet
+          BRANCH="bot/webhook-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git checkout -B "$BRANCH"
+          git rebase origin/main || true
+          git push -u origin "$BRANCH" --force-with-lease
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR (with BOT PAT)
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --title "bot: QuickNode webhook receiver + test route" \
+            --body  "Automated PR by firefly-bot\n\nAdds:\n- /api/webhooks/quicknode (token-guarded)\n- /api/webhooks/test\n- .env.example entry\n- README section" \
+            --base  main \
+            --head  "${{ steps.push_branch.outputs.branch }}" \
+          || echo "PR existiert vermutlich schon – ok."
