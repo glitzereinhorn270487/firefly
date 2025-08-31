@@ -1,0 +1,98 @@
+name: Firefly PR - QuickNode Webhook Receiver
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-webhook:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create Webhook Receiver + Test
+        run: |
+          mkdir -p app/api/webhooks/quicknode app/api/webhooks/test
+
+          # Receiver (token-guarded)
+          cat > app/api/webhooks/quicknode/route.ts <<'EOF'
+          import { NextRequest, NextResponse } from "next/server";
+
+          export async function POST(req: NextRequest) {
+            const token = req.nextUrl.searchParams.get("token");
+            if (!token || token !== process.env.QN_WEBHOOK_TOKEN) {
+              return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+            }
+
+            try {
+              const payload = await req.json();
+              console.log("QN event:", payload);
+
+              // TODO: Später an Rules/Trading-Logic weiterleiten
+              return NextResponse.json({ ok: true });
+            } catch (e) {
+              return NextResponse.json({ ok: false, error: "Bad JSON" }, { status: 400 });
+            }
+          }
+          EOF
+
+          # Simple test route
+          cat > app/api/webhooks/test/route.ts <<'EOF'
+          import { NextResponse } from "next/server";
+
+          export async function GET() {
+            return NextResponse.json({ ok: true, ts: Date.now() });
+          }
+          EOF
+
+          # Example env file
+          cat > .env.example <<'EOF'
+          # QuickNode webhook token (must match ?token=... query param)
+          QN_WEBHOOK_TOKEN=change-me
+          EOF
+
+          # Update README
+          cat >> README.md <<'EOF'
+
+          ## QuickNode Webhook
+          - Receiver: `POST /api/webhooks/quicknode?token=...`
+          - Env: set `QN_WEBHOOK_TOKEN` in Vercel or .env.local
+          - Test: `GET /api/webhooks/test`
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add app/api/webhooks .env.example README.md
+          git commit -m "feat(api): add QuickNode webhook receiver + test" || echo "No changes"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/webhook-${GITHUB_RUN_ID}"
+          git push "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "feat(api): add QuickNode webhook receiver + test" \
+            --body "Automated PR: adds QuickNode receiver (token-guarded), test route, and env example." \
+            --base main \
+            --head "${{ env.branch }}" \
+            || echo "PR already exists"
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
