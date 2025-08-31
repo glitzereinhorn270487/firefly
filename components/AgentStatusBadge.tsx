@@ -1,7 +1,3 @@
-export default function AgentStatusBadge({ ok }: { ok: boolean }) {
-  return (
-    <span style={{ color: ok ? "green" : "red" }}>
-      {ok ? "Running" : "Offline"}
-    </span>
-  );
+export default function AgentStatusBadge({ status }: { status: string }) {
+  return <span>Status: {status}</span>;
 }
