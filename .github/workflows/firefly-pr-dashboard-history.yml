@@ -25,32 +25,32 @@ jobs:
           git config user.name "firefly-bot"
           git config user.email "firefly-bot@users.noreply.github.com"
 
-      - name: Add Trade History & PnL Integration
+      - name: Add Trade History API + Dashboard Stub
         run: |
-          mkdir -p app/api/paper/history
+          mkdir -p app/api/trades
           mkdir -p app/dashboard
-          mkdir -p components
 
-          # API-Route für Trade History
-          cat > app/api/paper/history/route.ts <<'EOF'
+          # API Route
+          cat > app/api/trades/route.ts <<'EOF'
           import { NextResponse } from "next/server";
 
           export async function GET() {
             return NextResponse.json({
-              history: [],
-              message: "Paper trade history stub"
+              trades: [],
+              pnl: 0,
+              message: "Trade history stub"
             });
           }
           EOF
 
-          # Dashboard-Seite erweitern (Stub)
-          cat > app/dashboard/page.tsx <<'EOF'
-          export default function DashboardPage() {
+          # Dashboard Erweiterung
+          cat > app/dashboard/history.tsx <<'EOF'
+          export default function TradeHistory() {
             return (
-              <main>
-                <h1>Paper Trader Dashboard</h1>
-                <p>Trade History & PnL (Stub)</p>
-              </main>
+              <section>
+                <h2>Trade History</h2>
+                <p>No trades yet (stub)</p>
+              </section>
             );
           }
           EOF
@@ -58,7 +58,7 @@ jobs:
       - name: Commit changes
         run: |
           git add .
-          git commit -m "feat(dashboard): add paper trade history & PnL stubs"
+          git commit -m "feat(dashboard): add trade history & PnL stubs"
 
       - name: Push branch
         run: |
@@ -71,8 +71,8 @@ jobs:
           GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
         run: |
           gh pr create \
-            --title "feat(dashboard): add paper trade history & PnL stubs" \
-            --body "Automated PR for trade history + PnL integration stubs" \
+            --title "feat(dashboard): add trade history & PnL stubs" \
+            --body "Automated PR for trade history + PnL stub API" \
             --base main \
             --head "${{ env.branch }}" \
           || echo "PR existiert schon"
