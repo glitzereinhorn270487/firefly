@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# next build
+.next/
+out/
+.next/cache/
+
+# env
+.env
+.env.*
+!.env.example
+
+# misc
+.DS_Store
+.vercel
