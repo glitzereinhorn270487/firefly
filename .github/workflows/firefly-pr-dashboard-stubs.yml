@@ -1,0 +1,74 @@
+name: "Firefly PR - Dashboard Stubs"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-dashboard-stubs:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Add dashboard stubs
+        run: |
+          mkdir -p src/lib components
+          cat > src/lib/status.ts <<'EOF'
+          export type AgentStatus = "idle" | "trading" | "error";
+          export function getAgentStatus(): AgentStatus {
+            return "idle";
+          }
+          EOF
+
+          cat > components/AgentStatusBadge.tsx <<'EOF'
+          export default function AgentStatusBadge({ status }: { status: string }) {
+            return <span>Status: {status}</span>;
+          }
+          EOF
+
+          cat > components/AgentControls.tsx <<'EOF'
+          export default function AgentControls() {
+            return (
+              <div>
+                <button>Start</button>
+                <button>Stop</button>
+              </div>
+            );
+          }
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add src/lib/status.ts components/AgentStatusBadge.tsx components/AgentControls.tsx
+          git commit -m "chore(dashboard): add minimal stubs for status + components"
+
+      - name: Push branch
+        run: |
+          BRANCH="pr-dashboard-stubs-${GITHUB_RUN_ID}"
+          git checkout -b "$BRANCH"
+          git push -u origin "$BRANCH"
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          gh pr create \
+            --title "Dashboard stubs: status + components" \
+            --body "Minimal placeholders for dashboard (status + controls)" \
+            --base main \
+            --head "pr-dashboard-stubs-${GITHUB_RUN_ID}" || echo "PR exists"
