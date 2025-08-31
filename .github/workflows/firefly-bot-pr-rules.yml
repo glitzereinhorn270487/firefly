@@ -1,0 +1,232 @@
+name: Firefly Bot PR - Rules stubs
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Kurzbeschreibung (z.B. 'Rules-Stubs + Admin-Page')"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name  "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Create files (rules registry, example rule, api, admin page)
+        run: |
+          set -euo pipefail
+
+          mkdir -p src/rules/examples
+          mkdir -p app/api/rules
+          mkdir -p app/settings/rules
+          mkdir -p components
+
+          # ---- src/rules/types.ts
+          cat <<'EOF' > src/rules/types.ts
+          export interface RuleContext {
+            now: number;
+          }
+
+          export interface RuleResult {
+            id: string;
+            ok: boolean;
+            detail?: string;
+          }
+
+          export interface Rule {
+            id: string;
+            name: string;
+            description?: string;
+            run(ctx: RuleContext): Promise<RuleResult> | RuleResult;
+          }
+          EOF
+
+          # ---- src/rules/registry.ts
+          cat <<'EOF' > src/rules/registry.ts
+          import type { Rule } from "./types";
+
+          const _rules: Rule[] = [];
+
+          export function register(rule: Rule): void {
+            _rules.push(rule);
+          }
+
+          export function all(): Rule[] {
+            return _rules.slice();
+          }
+
+          export function byId(id: string): Rule | undefined {
+            return _rules.find(r => r.id === id);
+          }
+          EOF
+
+          # ---- src/rules/examples/demoRule.ts
+          cat <<'EOF' > src/rules/examples/demoRule.ts
+          import type { Rule, RuleResult } from "../types";
+
+          export const demoRule: Rule = {
+            id: "demo/ok",
+            name: "Always OK",
+            description: "Returns ok = true.",
+            run: (ctx): RuleResult => ({
+              id: "demo/ok",
+              ok: true,
+              detail: new Date(ctx.now).toISOString(),
+            }),
+          };
+          EOF
+
+          # ---- src/rules/index.ts (registriert Beispiele)
+          cat <<'EOF' > src/rules/index.ts
+          import { register } from "./registry";
+          import { demoRule } from "./examples/demoRule";
+
+          // Registrierung der eingebauten Rules
+          register(demoRule);
+
+          export * as Registry from "./registry";
+          export * from "./types";
+          EOF
+
+          # ---- app/api/rules/route.ts (Listet Rules)
+          cat <<'EOF' > app/api/rules/route.ts
+          import { NextResponse } from "next/server";
+          import * as Rules from "@/src/rules";
+
+          export async function GET() {
+            // Import oben sorgt dafür, dass die Demo-Rule registriert ist
+            const list = Rules.Registry.all().map(r => ({
+              id: r.id,
+              name: r.name,
+              description: r.description ?? "",
+            }));
+            return NextResponse.json({ ok: true, rules: list });
+          }
+          EOF
+
+          # ---- components/RuleCard.tsx
+          cat <<'EOF' > components/RuleCard.tsx
+          "use client";
+          import * as React from "react";
+
+          type Props = { id: string; name: string; description?: string };
+
+          export function RuleCard({ id, name, description }: Props) {
+            return (
+              <div style={{ padding: 12, border: "1px solid #27272a", borderRadius: 12, background: "#0b0b0c" }}>
+                <div style={{ fontWeight: 600 }}>{name}</div>
+                <div style={{ color: "#a1a1aa", fontSize: 13, marginTop: 4 }}>{id}</div>
+                {description ? <div style={{ marginTop: 8, fontSize: 14 }}>{description}</div> : null}
+              </div>
+            );
+          }
+          EOF
+
+          # ---- app/settings/rules/page.tsx (Admin/Übersicht)
+          cat <<'EOF' > app/settings/rules/page.tsx
+          import * as Rules from "@/src/rules";
+          import { RuleCard } from "@/components/RuleCard";
+
+          export const dynamic = "force-dynamic";
+
+          export default async function RulesPage() {
+            const list = Rules.Registry.all();
+
+            return (
+              <main style={{
+                maxWidth: 900,
+                margin: "40px auto",
+                padding: "0 16px",
+                color: "#e5e7eb",
+                fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial"
+              }}>
+                <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 16 }}>Rules</h1>
+                <p style={{ color: "#a1a1aa" }}>
+                  Demo-Registry. Neue Regeln unter <code>src/rules</code> hinzufügen.
+                </p>
+
+                <div style={{ display: "grid", gap: 12 }}>
+                  {list.map(r => (
+                    <RuleCard key={r.id} id={r.id} name={r.name} description={r.description} />
+                  ))}
+                </div>
+              </main>
+            );
+          }
+          EOF
+
+          # ---- README-Ergänzung
+          touch README.md
+          cat <<'EOF' >> README.md
+
+          ## Rules
+
+          - API: `/api/rules` (Liste der registrierten Regeln)
+          - Admin-Seite: `/settings/rules`
+          - Code: `src/rules` (types, registry, examples)
+          - Beispielregel: `demo/ok`
+
+          EOF
+
+      - name: Commit
+        run: |
+          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
+          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
+          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
+
+          git add \
+            src/rules/types.ts \
+            src/rules/registry.ts \
+            src/rules/examples/demoRule.ts \
+            src/rules/index.ts \
+            app/api/rules/route.ts \
+            app/settings/rules/page.tsx \
+            components/RuleCard.tsx \
+            README.md \
+            .firefly_*.txt
+
+          git commit -m "feat(rules): add registry, example rule, API + admin page — ${{ inputs.task }}"
+
+      - name: Push Branch with PAT
+        id: push_branch
+        env:
+          FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch origin main --quiet
+          BRANCH="bot/rules-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git checkout -B "$BRANCH"
+          git rebase origin/main || true
+          git push -u origin "$BRANCH" --force-with-lease
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR (with BOT PAT)
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --title "bot: Rules stubs (registry + demo + api + admin)" \
+            --body  "Automated PR by firefly-bot\n\nAdds:\n- Rules registry + demo rule\n- /api/rules\n- /settings/rules admin page\n- README section" \
+            --base  main \
+            --head  "${{ steps.push_branch.outputs.branch }}" \
+          || echo "PR existiert vermutlich schon – ok."
