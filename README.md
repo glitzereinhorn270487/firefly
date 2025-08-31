@@ -29,3 +29,10 @@ Beide müssen dem Secret `QN_WEBHOOK_TOKEN` entsprechen.
 - Code: `src/rules` (types, registry, examples)
 - Beispielregel: `demo/ok`
 
+
+## Webhooks
+
+- **QuickNode Receiver**: `POST /api/webhooks/quicknode`
+  - prüft Header `x-qn-token` gegen `process.env.QN_WEBHOOK_TOKEN`
+  - Payload wird geloggt
+- **Test-Route**: `GET /api/webhooks/test` → liefert Zeit + ob Token gesetzt ist

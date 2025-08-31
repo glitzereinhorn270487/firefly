@@ -1,30 +1,22 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-function forbidden() {
-  return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+function forbidden(msg: string = "Forbidden") {
+  return NextResponse.json({ ok: false, error: msg }, { status: 403 });
 }
 
-export async function GET(req: NextRequest) {
-  const qp = req.nextUrl.searchParams.get("token") ?? "";
-  const hv = req.headers.get("x-qn-token") ?? "";
-  if (!qp || qp !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
-  if (!hv || hv !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
-  return NextResponse.json({ ok: true });
-}
+export async function POST(req: Request) {
+  const token = req.headers.get("x-qn-token") ?? "";
+  if (!token || token !== process.env.QN_WEBHOOK_TOKEN) {
+    return forbidden("Invalid token");
+  }
 
-export async function POST(req: NextRequest) {
   try {
-    const qp = req.nextUrl.searchParams.get("token") ?? "";
-    const hv = req.headers.get("x-qn-token") ?? "";
-    if (!qp || qp !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
-    if (!hv || hv !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
-
     const payload = await req.json();
-    // Minimal-Filter: nur Raydium Pool-Creation Events weiterleiten/loggen
-    // (Dein Webhook auf QuickNode filtert bereits serverseitig – hier nur no-op)
-    console.log("QN event", JSON.stringify(payload));
+    console.log("[QN event]", payload);
+
+    // TODO: Filter Raydium creation events
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (e) {
     return NextResponse.json({ ok: false, error: "Bad JSON" }, { status: 400 });
   }
 }
