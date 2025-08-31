@@ -38,39 +38,39 @@ jobs:
           git add .firefly_*.txt
           git commit -m "bot: ${{ inputs.task }}"
 
-
       - name: Push Branch mit PAT
         if: ${{ success() }}  # optional: nur wenn vorher alles ok
         id: push_branch
-          env:
-    FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
-  run: |
-    set -e
-    git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        env:
+        FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+         set -e
+         git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-    # Aktuellen Stand von main holen
-    git fetch origin main --quiet
+     # Aktuellen Stand von main holen
+git fetch origin main --quiet
 
-    # Eindeutiger Branch-Name pro Run UND Attempt (Fix für Re-run)
-    BRANCH="bot/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-    git checkout -B "$BRANCH"
+        # Eindeutiger Branch-Name pro Run UND Attempt (Fix für Re-run)
+        BRANCH="bot/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        git checkout -B "$BRANCH"
 
-    # Auf neuesten main rebasen (keine Merge-Commits)
-    git rebase origin/main || true
+        # Auf neuesten main rebasen (keine Merge-Commits)
+        git rebase origin/main || true
 
-    # Push (neu anlegen oder aktualisieren)
-    git push -u origin "$BRANCH" --force-with-lease
+        # Push (neu anlegen oder aktualisieren)
+        git push -u origin "$BRANCH" --force-with-lease
 
-    # Branch-Namen für den nächsten Schritt ausgeben
-    echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+        # Branch-Namen für den nächsten Schritt ausgeben
+        echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
 
 
       - name: PR erstellen (mit BOT PAT)
-  if: ${{ steps.push_branch.outcome == 'success' }}
-  env:
-    GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
-  run: |
-    gh pr create \
+        if: ${{ steps.push_branch.outcome == 'success' }}
+        env:
+        GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+        gh pr create \
       --title "bot: ${{ inputs.task || 'Automated update' }}" \
       --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task || 'N/A' }}" \
       --base  main \
