@@ -63,9 +63,11 @@ jobs:
 
       - name: Push branch
         run: |
-          BRANCH="bot/pr-dashboard-history-${GITHUB_RUN_ID}"
+          BRANCH="pr-dashboard-positions-${GITHUB_RUN_ID}"
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git push -u origin HEAD:$BRANCH --force
-          echo "branch=$BRANCH" >> $GITHUB_ENV
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
 
       - name: Create PR
         env:
