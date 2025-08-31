@@ -36,3 +36,8 @@ Beide müssen dem Secret `QN_WEBHOOK_TOKEN` entsprechen.
   - prüft Header `x-qn-token` gegen `process.env.QN_WEBHOOK_TOKEN`
   - Payload wird geloggt
 - **Test-Route**: `GET /api/webhooks/test` → liefert Zeit + ob Token gesetzt ist
+
+## QuickNode Webhook
+- Receiver: `POST /api/webhooks/quicknode?token=...`
+- Env: set `QN_WEBHOOK_TOKEN` in Vercel or .env.local
+- Test: `GET /api/webhooks/test`
