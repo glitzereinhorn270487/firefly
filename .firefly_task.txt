@@ -1,3 +1,3 @@
 Task:
 
-Add ESLint config (.eslintrc.json): {   extends: next/core-web-vitals }
+Initialize minimal Next.js project structure:  - package.json mit next, react, typescript dependencies - tsconfig.json mit strict mode - next.config.js mit reactStrictMode true - app/layout.tsx + app/page.tsx (Hello World) - .eslintrc.json mit recommended rules
