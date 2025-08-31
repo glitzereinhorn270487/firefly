@@ -1,0 +1,139 @@
+name: Firefly PR - Dashboard: Paper Trader Integration
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-dashboard-paper:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Add Paper Trader Dashboard Integration
+        run: |
+          mkdir -p components app/dashboard
+
+          # Component: PaperPositionsTable
+          cat > components/PaperPositionsTable.tsx <<'EOF'
+          "use client";
+          import { useEffect, useState } from "react";
+
+          interface PaperPosition {
+            token: string;
+            amount: number;
+            entryPrice: number;
+            timestamp: number;
+          }
+
+          export default function PaperPositionsTable() {
+            const [positions, setPositions] = useState<PaperPosition[]>([]);
+
+            useEffect(() => {
+              fetch("/api/paper/positions")
+                .then(r => r.json())
+                .then(data => setPositions(data.positions || []))
+                .catch(console.error);
+            }, []);
+
+            return (
+              <div className="rounded-xl border p-4 shadow bg-white/5 backdrop-blur">
+                <h2 className="text-lg font-bold mb-2">📊 Paper Positions</h2>
+                {positions.length === 0 && <p className="text-gray-400">Keine offenen Paper-Trades</p>}
+                {positions.length > 0 && (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left">Token</th>
+                        <th className="text-right">Amount</th>
+                        <th className="text-right">Entry</th>
+                        <th className="text-right">Since</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.map((p, i) => (
+                        <tr key={i} className="border-t border-gray-700">
+                          <td>{p.token}</td>
+                          <td className="text-right">{p.amount}</td>
+                          <td className="text-right">{p.entryPrice}</td>
+                          <td className="text-right">{new Date(p.timestamp).toLocaleTimeString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          }
+          EOF
+
+          # API endpoint to list positions
+          mkdir -p app/api/paper
+          cat > app/api/paper/positions/route.ts <<'EOF'
+          import { NextResponse } from "next/server";
+          import { listPaperPositions } from "@/src/engine/paperTrader";
+
+          export async function GET() {
+            return NextResponse.json({ positions: listPaperPositions() });
+          }
+          EOF
+
+          # Integrate component into dashboard
+          cat > app/dashboard/page.tsx <<'EOF'
+          import PaperPositionsTable from "@/components/PaperPositionsTable";
+
+          export default function DashboardPage() {
+            return (
+              <main className="p-6 space-y-6">
+                <h1 className="text-2xl font-bold">🚀 Firefly Dashboard</h1>
+                <PaperPositionsTable />
+              </main>
+            );
+          }
+          EOF
+
+          # Update README
+          cat >> README.md <<'EOF'
+
+          ## Dashboard Paper Trade Integration
+          - `components/PaperPositionsTable.tsx`: shows current paper positions
+          - `GET /api/paper/positions`: backend route to fetch positions
+          - integrated into `/dashboard`
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add components app/dashboard app/api/paper README.md
+          git commit -m "feat(dashboard): show paper trader positions in dashboard" || echo "No changes"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/dashboard-paper-${GITHUB_RUN_ID}"
+          git push "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "feat(dashboard): show paper trader positions in dashboard" \
+            --body "Automated PR: integrates Paper Trader positions table into dashboard UI." \
+            --base main \
+            --head "${{ env.branch }}" \
+            || echo "PR already exists"
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
