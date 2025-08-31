@@ -14,3 +14,10 @@ Beide müssen dem Secret `QN_WEBHOOK_TOKEN` entsprechen.
 **Secrets setzen**  
 - Lokal: `.env.local` → `QN_WEBHOOK_TOKEN=dein_token`
 - Vercel Project Env / GitHub Secrets analog.
+
+## Dashboard
+
+- Seite: `/dashboard`
+- Health-Endpoint: `/api/health`
+- Komponenten: `AgentStatusBadge`, `AgentControls` (Demo)
+
