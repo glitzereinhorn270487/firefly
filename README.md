@@ -41,3 +41,8 @@ Beide müssen dem Secret `QN_WEBHOOK_TOKEN` entsprechen.
 - Receiver: `POST /api/webhooks/quicknode?token=...`
 - Env: set `QN_WEBHOOK_TOKEN` in Vercel or .env.local
 - Test: `GET /api/webhooks/test`
+
+## Trading Engine + Paper Trader
+- `src/engine/tradingEngine.ts`: applies rules to events
+- `src/engine/paperTrader.ts`: simulates trades
+- Endpoint: `POST /api/trade` with `{ token, price, ...event }`
