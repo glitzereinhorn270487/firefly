@@ -60,8 +60,10 @@ jobs:
       - name: Push branch
         run: |
           BRANCH="pr-dashboard-stubs-${GITHUB_RUN_ID}"
-          git checkout -b "$BRANCH"
-          git push -u origin "$BRANCH"
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -u origin HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
 
       - name: Create PR
         env:
