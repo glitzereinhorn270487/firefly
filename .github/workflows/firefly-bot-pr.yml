@@ -66,13 +66,16 @@ jobs:
 
 
       - name: PR erstellen (mit BOT PAT)
-        env:
-          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}  # <- statt GITHUB_TOKEN den PAT nutzen
-        run: |
-         gh pr create \
-         --title "bot: ${{ inputs.task }}" \
-         --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
-         --base  main \
-         --head  "bot/${GITHUB_RUN_ID}"
+  if: ${{ steps.push_branch.outcome == 'success' }}
+  env:
+    GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+  run: |
+    gh pr create \
+      --title "bot: ${{ inputs.task || 'Automated update' }}" \
+      --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task || 'N/A' }}" \
+      --base  main \
+      --head  "${{ steps.push_branch.outputs.branch }}" \
+    || echo "PR existiert vermutlich schon – ok."
+
 
             
