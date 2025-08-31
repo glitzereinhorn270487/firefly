@@ -1,0 +1,58 @@
+name: Firefly Bot PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Was soll der Bot machen? (Freitext)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Commit task marker (kleine, sichere Änderungen)
+        run: |
+          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
+          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
+          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
+          git add .firefly_*.txt
+          git commit -m "bot: ${{ inputs.task }}"
+
+      - name: Push Branch mit PAT
+        env:
+          GH_REPO: ${{ github.repository }}
+        run: |
+          BRANCH="bot/${GITHUB_RUN_ID}"
+          git checkout -b "$BRANCH"
+          git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GH_REPO}.git
+          git push -u origin "$BRANCH"
+
+      - name: PR erstellen (mit GITHUB_TOKEN)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "bot: ${{ inputs.task }}" \
+            --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
+            --base  main \
+            --head  "bot/${GITHUB_RUN_ID}"
