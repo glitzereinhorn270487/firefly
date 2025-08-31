@@ -1,0 +1,146 @@
+name: Firefly Bot PR - add stubs (rules, status, components)
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "z.B. Missing module stubs hinzufügen"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Add missing stubs
+        run: |
+          set -euo pipefail
+
+          mkdir -p src/rules
+          mkdir -p src/lib
+          mkdir -p components
+
+          # ---- src/rules/index.ts
+          cat <<'EOF' > src/rules/index.ts
+          export type Rule = {
+            id: string;
+            name: string;
+            description: string;
+            active: boolean;
+          };
+
+          // Dummy rules for now
+          export const rules: Rule[] = [
+            { id: "momentum", name: "Momentum", description: "Entry when momentum strong", active: true },
+            { id: "liqburn", name: "Liquidity Burn", description: "Monitor LIQ burn + holder distribution", active: false },
+          ];
+
+          export function getRules(): Rule[] {
+            return rules;
+          }
+          EOF
+
+          # ---- src/lib/status.ts
+          cat <<'EOF' > src/lib/status.ts
+          export type AgentStatus = "idle" | "running" | "error";
+
+          export function getAgentStatus(): AgentStatus {
+            // Stub logic
+            return "idle";
+          }
+          EOF
+
+          # ---- components/AgentStatusBadge.tsx
+          cat <<'EOF' > components/AgentStatusBadge.tsx
+          "use client";
+          import React from "react";
+
+          export default function AgentStatusBadge({ status }: { status: string }) {
+            const color =
+              status === "running" ? "green" :
+              status === "error" ? "red" : "gray";
+
+            return (
+              <span
+                style={{
+                  display: "inline-block",
+                  padding: "4px 8px",
+                  borderRadius: "8px",
+                  background: color,
+                  color: "white",
+                  fontSize: "0.8rem",
+                }}
+              >
+                {status}
+              </span>
+            );
+          }
+          EOF
+
+          # ---- components/AgentControls.tsx
+          cat <<'EOF' > components/AgentControls.tsx
+          "use client";
+          import React from "react";
+
+          export default function AgentControls() {
+            return (
+              <div style={{ marginTop: "1rem" }}>
+                <button style={{ marginRight: "8px" }}>Start</button>
+                <button>Stop</button>
+              </div>
+            );
+          }
+          EOF
+
+      - name: Commit
+        run: |
+          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
+          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
+          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
+
+          git add src/rules src/lib components .firefly_*.txt
+          git commit -m "chore: add missing stubs (rules, status, components) — ${{ inputs.task }}"
+
+      - name: Push Branch with PAT
+        id: push_branch
+        env:
+          FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch origin main --quiet
+          BRANCH="bot/stubs-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git checkout -B "$BRANCH"
+          git rebase origin/main || true
+          git push -u origin "$BRANCH" --force-with-lease
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR (with BOT PAT)
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh pr create \
+            --title "bot: add missing stubs (rules, status, components)" \
+            --body  "Automated PR by firefly-bot\n\nAdds:\n- src/rules\n- src/lib/status\n- components/AgentStatusBadge\n- components/AgentControls" \
+            --base  main \
+            --head  "${{ steps.push_branch.outputs.branch }}" \
+          || echo "PR existiert vermutlich schon – ok."
