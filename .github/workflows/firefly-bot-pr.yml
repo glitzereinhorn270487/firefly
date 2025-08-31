@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: "Was soll der Bot machen? (Freitext)"
+        description: "Kurzbeschreibung (z.B. 'Webhook-Receiver + Test + README')"
         required: true
         type: string
 
@@ -27,12 +27,17 @@ jobs:
 
       - name: Git user
         run: |
-          git config user.name "firefly-bot"
+          git config user.name  "firefly-bot"
           git config user.email "firefly-bot@users.noreply.github.com"
 
-      - name: Create QuickNode webhook receiver
+      - name: Create files (QuickNode receiver, test, README)
+        id: make_files
         run: |
+          set -euo pipefail
+
           mkdir -p app/api/webhooks/quicknode
+          mkdir -p app/api/webhooks/test
+
           cat <<'EOF' > app/api/webhooks/quicknode/route.ts
           import { NextRequest, NextResponse } from "next/server";
 
@@ -50,7 +55,14 @@ jobs:
 
           export async function POST(req: NextRequest) {
             try {
+              const qp = req.nextUrl.searchParams.get("token") ?? "";
+              const hv = req.headers.get("x-qn-token") ?? "";
+              if (!qp || qp !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
+              if (!hv || hv !== process.env.QN_WEBHOOK_TOKEN) return forbidden();
+
               const payload = await req.json();
+              // Minimal-Filter: nur Raydium Pool-Creation Events weiterleiten/loggen
+              // (Dein Webhook auf QuickNode filtert bereits serverseitig – hier nur no-op)
               console.log("QN event", JSON.stringify(payload));
               return NextResponse.json({ ok: true });
             } catch {
@@ -59,39 +71,64 @@ jobs:
           }
           EOF
 
+          cat <<'EOF' > app/api/webhooks/test/route.ts
+          import { NextResponse } from "next/server";
 
-      - name: Push Branch mit PAT
+          export async function GET() {
+            return NextResponse.json({ ok: true, ts: Date.now() });
+          }
+          EOF
+
+          # README-Ergänzung
+          touch README.md
+          cat <<'EOF' >> README.md
+
+          ## QuickNode Webhook
+
+          Receiver: `/api/webhooks/quicknode?token=...`  
+          Erwarteter Header: `x-qn-token: ...`  
+          Beide müssen dem Secret `QN_WEBHOOK_TOKEN` entsprechen.
+
+          **Secrets setzen**  
+          - Lokal: `.env.local` → `QN_WEBHOOK_TOKEN=dein_token`
+          - Vercel Project Env / GitHub Secrets analog.
+          EOF
+
+          echo "files_changed=yes" >> "$GITHUB_OUTPUT"
+
+      - name: Commit
+        run: |
+          echo "bot: task ${{ github.run_id }}" > .firefly_title.txt
+          printf "Task:\n\n${{ inputs.task }}\n" > .firefly_task.txt
+          printf "bot: task ${{ github.run_id }}\n\nTask:\n${{ inputs.task }}\n" > .firefly_commit.txt
+
+          git add app/api/webhooks/quicknode/route.ts app/api/webhooks/test/route.ts README.md .firefly_*.txt
+          git commit -m "feat(api): QuickNode webhook receiver (+test) — ${{ inputs.task }}"
+
+      - name: Push Branch with PAT
         id: push_branch
         env:
           FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
         run: |
-          set -e
+          set -euo pipefail
           git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-
-          # Aktuellen Stand von main holen
           git fetch origin main --quiet
 
-          # Eindeutiger Branch-Name pro Run UND Attempt
           BRANCH="bot/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git checkout -B "$BRANCH"
-
-          # Auf neuesten main rebasen (keine Merge-Commits)
           git rebase origin/main || true
-
-          # Push
           git push -u origin "$BRANCH" --force-with-lease
 
-          # Branch für nächsten Schritt merken
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: PR erstellen (mit BOT PAT)
-        if: ${{ steps.push_branch.outcome == 'success' }}
+      - name: Create PR (with BOT PAT)
         env:
           GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
         run: |
+          set -euo pipefail
           gh pr create \
-            --title "bot: ${{ inputs.task || 'Automated update' }}" \
-            --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task || 'N/A' }}" \
+            --title "bot: ${{ inputs.task }}" \
+            --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}\n\nAdds:\n- /api/webhooks/quicknode (token-guard)\n- /api/webhooks/test\n- README section" \
             --base  main \
             --head  "${{ steps.push_branch.outputs.branch }}" \
           || echo "PR existiert vermutlich schon – ok."
