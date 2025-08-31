@@ -1,3 +1,14 @@
+export interface RuleContext {
+  price: number;
+  volume: number;
+  [key: string]: any;
+}
+
+export function applyRules(ctx: RuleContext): "buy" | "sell" | "hold" {
+  // Minimal-Stub → immer "hold"
+  return "hold";
+}
+
 export type Rule = {
   id: string;
   name: string;
