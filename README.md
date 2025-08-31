@@ -21,3 +21,11 @@ Beide müssen dem Secret `QN_WEBHOOK_TOKEN` entsprechen.
 - Health-Endpoint: `/api/health`
 - Komponenten: `AgentStatusBadge`, `AgentControls` (Demo)
 
+
+## Rules
+
+- API: `/api/rules` (Liste der registrierten Regeln)
+- Admin-Seite: `/settings/rules`
+- Code: `src/rules` (types, registry, examples)
+- Beispielregel: `demo/ok`
+
