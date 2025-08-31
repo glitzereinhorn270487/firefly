@@ -20,12 +20,12 @@ jobs:
       OPENAI_API_KEY:   ${{ secrets.OPENAI_API_KEY }}
 
     steps:
-      - name: Checkout (ohne Default-Creds)
+      - name: Checkout (no default creds)
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Git-User setzen (firefly-bot)
+      - name: Git user
         run: |
           git config user.name "firefly-bot"
           git config user.email "firefly-bot@users.noreply.github.com"
@@ -39,31 +39,25 @@ jobs:
       - name: Show versions
         run: node -v && npm -v
 
-      - name: Python einrichten
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Aider installieren (optional)
+      - name: Install Aider (optional)
         if: ${{ env.OPENAI_API_KEY != '' }}
         run: |
           python -m pip install --upgrade pip
           pip install "aider-chat>=0.86"
 
-      - name: Code-Änderungen aus Task erzeugen (optional)
+      - name: Generate code from task (optional)
         if: ${{ env.OPENAI_API_KEY != '' }}
         shell: bash
         run: |
           set -euo pipefail
-          MSG_FILE="$(mktemp)"
-          # Task-Text wörtlich in Datei schreiben (keine Expansion):
-          cat > "$MSG_FILE" <<'TASK'
-          ${{ inputs.task }}
-          TASK
-          # Inhalt sicher als ein Argument an Aider übergeben:
-          aider --yes --no-gitignore --commit --message "$(cat "$MSG_FILE")" || true
+          aider --yes --no-gitignore --commit --message "${{ inputs.task }}" || true
 
-      - name: Commit (falls Änderungen)
+      - name: Commit if changes
         shell: bash
         run: |
           if [ -n "$(git status --porcelain)" ]; then
@@ -73,34 +67,27 @@ jobs:
             echo "No changes to commit."
           fi
 
-      - name: Branch pushen und PR erstellen (nur wenn Änderungen und Token)
+      - name: Push branch & open PR (requires FIREFLY_BOT_TOKEN)
         if: ${{ env.FIREFLY_BOT_TOKEN != '' }}
         env:
-          GH_TOKEN: ${{ github.token }}   # für gh pr create
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          # Nur wenn es Commit(s) gibt
+          # Only if we have commits
           if [ -z "$(git log origin/main..HEAD --oneline || true)" ]; then
-            echo "No new commits; skipping PR creation."
+            echo "No new commits; skipping PR."
             exit 0
           fi
-
           BRANCH="bot/${GITHUB_RUN_ID}"
           git checkout -B "$BRANCH"
-
-          # Push mit Bot-PAT
           git remote set-url origin https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${{ github.repository }}.git
           git push -u origin "$BRANCH"
-
-          # PR mit Actions-Token
           gh pr create \
             --title "bot: ${{ inputs.task }}" \
-            --body "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
-            --head "$BRANCH" \
-            --base "main" \
-            --repo "${{ github.repository }}"
+            --body  "Automated PR by firefly-bot\n\nTask:\n${{ inputs.task }}" \
+            --head "$BRANCH" --base "main" --repo "${{ github.repository }}"
 
-      - name: Hinweis, falls kein Bot-Token gesetzt ist
+      - name: Hint if no token
         if: ${{ env.FIREFLY_BOT_TOKEN == '' }}
         run: echo "::warning:: FIREFLY_BOT_TOKEN secret fehlt – Push/PR übersprungen."
