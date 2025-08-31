@@ -1,4 +1,5 @@
-name: Firefly PR - Dashboard: Trade History & PnL
+name: "Firefly PR - Dashboard: Trade History & PnL"
+
 
 on:
   workflow_dispatch:
