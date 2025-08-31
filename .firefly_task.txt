@@ -1,3 +1,3 @@
 Task:
 
-Add next-env.d.ts for Next.js + TS: /// <reference types=next /> /// <reference types=next/types/global /> /// <reference types=next/image-types/global />  // NOTE: This file should not be edited
+Add ESLint config (.eslintrc.json): {   extends: next/core-web-vitals }
