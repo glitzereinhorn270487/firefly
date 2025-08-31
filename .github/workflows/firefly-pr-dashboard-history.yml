@@ -1,0 +1,147 @@
+name: Firefly PR - Dashboard: Trade History & PnL
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pr-dashboard-history:
+    runs-on: ubuntu-latest
+    env:
+      FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Git user
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+
+      - name: Add Trade History Dashboard Integration
+        run: |
+          mkdir -p components app/api/paper app/dashboard
+
+          # Component: TradeHistoryTable
+          cat > components/TradeHistoryTable.tsx <<'EOF'
+          "use client";
+          import { useEffect, useState } from "react";
+
+          interface Trade {
+            token: string;
+            side: "BUY" | "SELL";
+            amount: number;
+            price: number;
+            pnl?: number;
+            timestamp: number;
+          }
+
+          export default function TradeHistoryTable() {
+            const [history, setHistory] = useState<Trade[]>([]);
+
+            useEffect(() => {
+              fetch("/api/paper/history")
+                .then(r => r.json())
+                .then(data => setHistory(data.history || []))
+                .catch(console.error);
+            }, []);
+
+            return (
+              <div className="rounded-xl border p-4 shadow bg-white/5 backdrop-blur">
+                <h2 className="text-lg font-bold mb-2">📜 Trade History</h2>
+                {history.length === 0 && <p className="text-gray-400">Noch keine abgeschlossenen Trades</p>}
+                {history.length > 0 && (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-left">Token</th>
+                        <th className="text-left">Side</th>
+                        <th className="text-right">Amount</th>
+                        <th className="text-right">Price</th>
+                        <th className="text-right">PnL</th>
+                        <th className="text-right">Time</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((t, i) => (
+                        <tr key={i} className="border-t border-gray-700">
+                          <td>{t.token}</td>
+                          <td className={t.side === "BUY" ? "text-green-400" : "text-red-400"}>{t.side}</td>
+                          <td className="text-right">{t.amount}</td>
+                          <td className="text-right">{t.price}</td>
+                          <td className="text-right">{t.pnl !== undefined ? t.pnl.toFixed(3) : "-"}</td>
+                          <td className="text-right">{new Date(t.timestamp).toLocaleTimeString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          }
+          EOF
+
+          # API endpoint to list history
+          mkdir -p app/api/paper/history
+          cat > app/api/paper/history/route.ts <<'EOF'
+          import { NextResponse } from "next/server";
+          import { listTradeHistory } from "@/src/engine/paperTrader";
+
+          export async function GET() {
+            return NextResponse.json({ history: listTradeHistory() });
+          }
+          EOF
+
+          # Extend dashboard page with both tables
+          cat > app/dashboard/page.tsx <<'EOF'
+          import PaperPositionsTable from "@/components/PaperPositionsTable";
+          import TradeHistoryTable from "@/components/TradeHistoryTable";
+
+          export default function DashboardPage() {
+            return (
+              <main className="p-6 space-y-6">
+                <h1 className="text-2xl font-bold">🚀 Firefly Dashboard</h1>
+                <PaperPositionsTable />
+                <TradeHistoryTable />
+              </main>
+            );
+          }
+          EOF
+
+          # Update README
+          cat >> README.md <<'EOF'
+
+          ## Dashboard Trade History Integration
+          - `components/TradeHistoryTable.tsx`: lists past trades with PnL
+          - `GET /api/paper/history`: backend route
+          - integrated into `/dashboard` below PaperPositionsTable
+          EOF
+
+      - name: Commit changes
+        run: |
+          git add components app/dashboard app/api/paper README.md
+          git commit -m "feat(dashboard): add trade history with PnL" || echo "No changes"
+
+      - name: Push branch
+        run: |
+          BRANCH="bot/dashboard-history-${GITHUB_RUN_ID}"
+          git push "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:$BRANCH --force
+          echo "branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Create PR
+        run: |
+          gh pr create \
+            --title "feat(dashboard): add trade history with PnL" \
+            --body "Automated PR: integrates Trade History table with PnL into dashboard UI." \
+            --base main \
+            --head "${{ env.branch }}" \
+            || echo "PR already exists"
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
