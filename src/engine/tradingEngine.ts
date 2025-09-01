@@ -1,33 +1,43 @@
 // src/engine/tradingEngine.ts
 import { applyRules } from "../rules";
 
-// Aktionstypen strikt halten
 export type Action = "buy" | "sell" | "hold";
 
-// Einheitlicher Rückgabe-Typ
 export interface TradeDecision {
   action: Action;
   reason?: string;
   size?: number;
 }
 
-// Hauptfunktion: immer ein TradeDecision-Objekt zurückgeben
+// ---- Type Guards -------------------------------------------------
+function isAction(x: unknown): x is Action {
+  return x === "buy" || x === "sell" || x === "hold";
+}
+
+function isDecisionLike(x: unknown): x is Partial<TradeDecision> {
+  return typeof x === "object" && x !== null && "action" in (x as any);
+}
+
+// ---- Engine (always returns a TradeDecision object) --------------
 function decideTrade(input: unknown): TradeDecision {
-  const outcome = applyRules(input as any);
+  const outcome = applyRules(input as any) as unknown;
 
-  // outcome kann string ("buy" | "sell" | "hold") ODER ein Objekt sein
-  const action: Action =
-    outcome === "buy" || outcome === "sell" || outcome === "hold"
-      ? outcome
-      : (outcome?.action as Action) ?? "hold";
+  let action: Action = "hold";
+  let reason: string | undefined;
+  let size: number | undefined;
 
-  return {
-    action,
-    reason: typeof outcome === "object" && outcome !== null ? (outcome as any).reason : undefined,
-    size: typeof outcome === "object" && outcome !== null ? (outcome as any).size : undefined,
-  };
+  if (isAction(outcome)) {
+    action = outcome;
+  } else if (isDecisionLike(outcome)) {
+    const maybeAction = (outcome as any).action;
+    if (isAction(maybeAction)) action = maybeAction;
+    reason = (outcome as any).reason;
+    size = (outcome as any).size;
+  }
+
+  return { action, reason, size };
 }
 
 export default decideTrade;
-// Named export für bestehende Importe in der API-Route
+// Für bestehende named-Imports (z.B. in app/api/trade/route.ts)
 export { decideTrade as runTradingEngine };
