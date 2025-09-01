@@ -1,0 +1,88 @@
+name: PR - Fix TradingEngine Return Type
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Apply fix
+        run: |
+          mkdir -p src/engine
+          cat > src/engine/tradingEngine.ts <<'EOF'
+// src/engine/tradingEngine.ts
+import { applyRules } from "../rules";
+
+export type Action = "buy" | "sell" | "hold";
+
+export interface TradeDecision {
+  action: Action;
+  reason?: string;
+  size?: number;
+}
+
+function isAction(x: unknown): x is Action {
+  return x === "buy" || x === "sell" || x === "hold";
+}
+
+function isDecisionLike(x: unknown): x is Partial<TradeDecision> {
+  return typeof x === "object" && x !== null && "action" in (x as any);
+}
+
+export function runTradingEngine(input: unknown): TradeDecision {
+  const outcome = applyRules(input as any) as unknown;
+
+  let action: Action = "hold";
+  let reason: string | undefined;
+  let size: number | undefined;
+
+  if (isAction(outcome)) {
+    action = outcome;
+  } else if (isDecisionLike(outcome)) {
+    const maybeAction = (outcome as any).action;
+    if (isAction(maybeAction)) action = maybeAction;
+    reason = (outcome as any).reason;
+    size = (outcome as any).size;
+  }
+
+  return { action, reason, size };
+}
+
+export default runTradingEngine;
+EOF
+
+      - name: Commit
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+          git checkout -b fix/trading-engine
+          git add src/engine/tradingEngine.ts
+          git commit -m "fix(engine): ensure runTradingEngine always returns TradeDecision"
+
+      - name: Push branch
+        env:
+          FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -u origin fix/trading-engine --force-with-lease
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          gh pr create \
+            --title "fix(engine): TradeDecision return type" \
+            --body "Replaces legacy return with a strict TradeDecision object." \
+            --base main \
+            --head fix/trading-engine || echo "PR may already exist"
