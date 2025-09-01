@@ -51,3 +51,8 @@ Beide müssen dem Secret `QN_WEBHOOK_TOKEN` entsprechen.
 - `src/engine/tradingEngine.ts`: applies rules to events
 - `src/engine/paperTrader.ts`: simulates trades
 - Endpoint: `POST /api/trade` with `{ token, price, ...event }`
+
+## Trading Engine + Paper Trader
+- `src/engine/tradingEngine.ts`: applies rules to events
+- `src/engine/paperTrader.ts`: simulates trades
+- Endpoint: `POST /api/trade` with `{ token, price, ...event }`
