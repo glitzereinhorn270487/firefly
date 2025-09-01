@@ -1,0 +1,72 @@
+name: PR - Add PaperTrader Stub
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Add PaperTrader stub
+        run: |
+          mkdir -p src/engine
+          cat > src/engine/paperTrader.ts <<'EOF'
+// src/engine/paperTrader.ts
+import { TradeDecision } from "./tradingEngine";
+
+export interface PaperTradeResult {
+  success: boolean;
+  action: TradeDecision["action"];
+  reason?: string;
+  size?: number;
+  timestamp: number;
+}
+
+export async function executePaperTrade(
+  decision: TradeDecision
+): Promise<PaperTradeResult> {
+  // TODO: later connect to DB/Redis + Solana price feeds
+  return {
+    success: true,
+    action: decision.action,
+    reason: decision.reason,
+    size: decision.size,
+    timestamp: Date.now(),
+  };
+}
+EOF
+
+      - name: Commit
+        run: |
+          git config user.name "firefly-bot"
+          git config user.email "firefly-bot@users.noreply.github.com"
+          git checkout -b feature/papertrader
+          git add src/engine/paperTrader.ts
+          git commit -m "feat(engine): add PaperTrader stub"
+
+      - name: Push branch
+        env:
+          FIREFLY_BOT_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          git remote set-url origin "https://x-access-token:${FIREFLY_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -u origin feature/papertrader --force-with-lease
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.FIREFLY_BOT_TOKEN }}
+        run: |
+          gh pr create \
+            --title "feat(engine): PaperTrader stub" \
+            --body "Adds executePaperTrade function for simulating trades (stub for Paper Trade phase)." \
+            --base main \
+            --head feature/papertrader || echo "PR may already exist"
