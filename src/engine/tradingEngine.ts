@@ -14,4 +14,7 @@ export async function decideTrade(input: unknown): Promise<TradeDecision> {
   return { action };
 }
 
+export { decideTrade as runTradingEngine };
+
+
 export default decideTrade;
