@@ -1,15 +1,17 @@
 import { applyRules } from "../rules";
 
+export type TradeAction = "buy" | "sell" | "hold";
+
 export interface TradeDecision {
-  action: "buy" | "sell" | "hold";
-  reason: string;
-  score?: number;
+  action: TradeAction;
+  reason?: string;
 }
 
-export async function runTradingEngine(event: any): Promise<TradeDecision> {
-  // Placeholder: apply rules to incoming event
-  const decision = await applyRules(event);
-
-  // TODO: risk management, capital allocation, logging
-  return decision;
+export async function decideTrade(input: unknown): Promise<TradeDecision> {
+  // applyRules sollte "buy" | "sell" | "hold" liefern
+  const action = await applyRules(input as any);
+  // In ein Objekt verpacken, das zum erwarteten Typ passt
+  return { action };
 }
+
+export default decideTrade;
